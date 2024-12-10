@@ -1,3 +1,10 @@
+{-|
+Module      : Plutarch.MerkleTree.Merkling
+Description : Functions for combining merkle tree nodes
+Copyright   : (c) Philip DiSarro, 2024
+Stability   : experimental
+
+-}
 module Plutarch.MerkleTree.Merkling(
   pmerkle_16,
   pmerkle_8,

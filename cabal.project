@@ -31,3 +31,4 @@ source-repository-package
       .
       plutarch-ledger-api
       plutarch-extra
+      plutarch-test

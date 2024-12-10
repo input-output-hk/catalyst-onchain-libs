@@ -1,4 +1,9 @@
-{-| Helpers for merkle tree implementation
+{-|
+Module      : Plutarch.MerkleTree.Helpers
+Description : Helpers for merkle tree implementation
+Copyright   : (c) Philip DiSarro, 2024
+Stability   : experimental
+
 -}
 module Plutarch.MerkleTree.Helpers(
   pcombine,

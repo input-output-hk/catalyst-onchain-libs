@@ -5,6 +5,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-|
+Module      : Plutarch.Core.Utils
+Description : Collection of plutarch utility functions
+Copyright   : (c) Philip DiSarro, 2024
+Stability   : experimental
+
+-}
 module Plutarch.Core.Utils(
   PPosixTimeRange,
   PCustomFiniteRange (..),
@@ -92,44 +99,69 @@ module Plutarch.Core.Utils(
   ppairDataBuiltinRaw,
 ) where
 
-import Data.List (foldl')
-import Data.Text qualified as T
-import Plutarch.Bool (pand')
-import Plutarch.Builtin (PAsData, PBuiltinList (..), PBuiltinPair, PData,
-                         PDataNewtype (..), PIsData, pasConstr, pdata,
-                         pforgetData, pfromData, pfstBuiltin, ppairDataBuiltin,
-                         psndBuiltin)
-import Plutarch.DataRepr.Internal.Field (HRec (..), Labeled (Labeled))
-import Plutarch.Internal (ClosedTerm, PType, S, Term, perror, phoistAcyclic,
-                          plet, punsafeBuiltin, punsafeCoerce, type (:-->),
-                          (#$), (#))
-import Plutarch.LedgerApi.AssocMap qualified as AssocMap
-import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
-                              KeyGuarantees (Sorted), PAddress,
-                              PCredential (..), PCurrencySymbol, PDatum,
-                              PExtended (PFinite), PInterval (..),
-                              PLowerBound (PLowerBound), PMap (..), PMaybeData,
-                              POutputDatum (POutputDatum), PPosixTime (..),
-                              PPubKeyHash, PRedeemer, PScriptHash, PScriptInfo,
-                              PScriptPurpose, PTokenName, PTxInInfo, PTxOut,
-                              PTxOutRef, PUpperBound (PUpperBound), PValue (..))
-import Plutarch.LedgerApi.Value (padaSymbol, pnormalize, pvalueOf)
-import Plutarch.LedgerApi.Value qualified as Value
-import Plutarch.Monadic qualified as P
-import Plutarch.Num (PNum)
-import Plutarch.Prelude (DerivePlutusType (..), Generic, PBool (..),
-                         PByteString, PEq (..), PInteger,
-                         PIntegral (pdiv, pquot, prem), PIsListLike,
-                         PListLike (..), PMaybe (..), POrd, PPair (..),
-                         PPartialOrd ((#<), (#<=)), PShow, PTryFrom,
-                         PlutusType (..), PlutusTypeScott,
-                         TermCont (runTermCont), Type, pall, pany, pcon,
-                         pconcat, pconstant, pelem, pfield, pfilter, pfix,
-                         pfoldl, pif, plam, plength, plengthBS, pletFields,
-                         pletFieldsC, pmap, pmatch, pmatchC, pnot, precList,
-                         psliceBS, pto, ptraceInfoError, ptryFrom, tcont, (#&&))
-import PlutusCore qualified as PLC
-import Prelude
+import           Data.List                        (foldl')
+import qualified Data.Text                        as T
+import           Plutarch.Bool                    (pand')
+import           Plutarch.Builtin                 (PAsData, PBuiltinList (..),
+                                                   PBuiltinPair, PData,
+                                                   PDataNewtype (..), PIsData,
+                                                   pasConstr, pdata,
+                                                   pforgetData, pfromData,
+                                                   pfstBuiltin,
+                                                   ppairDataBuiltin,
+                                                   psndBuiltin)
+import           Plutarch.DataRepr.Internal.Field (HRec (..), Labeled (Labeled))
+import           Plutarch.Internal                (ClosedTerm, PType, S, Term,
+                                                   perror, phoistAcyclic, plet,
+                                                   punsafeBuiltin,
+                                                   punsafeCoerce, type (:-->),
+                                                   (#$), (#))
+import qualified Plutarch.LedgerApi.AssocMap      as AssocMap
+import           Plutarch.LedgerApi.V3            (AmountGuarantees (NonZero, Positive),
+                                                   KeyGuarantees (Sorted),
+                                                   PAddress, PCredential (..),
+                                                   PCurrencySymbol, PDatum,
+                                                   PExtended (PFinite),
+                                                   PInterval (..),
+                                                   PLowerBound (PLowerBound),
+                                                   PMap (..), PMaybeData,
+                                                   POutputDatum (POutputDatum),
+                                                   PPosixTime (..), PPubKeyHash,
+                                                   PRedeemer, PScriptHash,
+                                                   PScriptInfo, PScriptPurpose,
+                                                   PTokenName, PTxInInfo,
+                                                   PTxOut, PTxOutRef,
+                                                   PUpperBound (PUpperBound),
+                                                   PValue (..))
+import           Plutarch.LedgerApi.Value         (padaSymbol, pnormalize,
+                                                   pvalueOf)
+import qualified Plutarch.LedgerApi.Value         as Value
+import qualified Plutarch.Monadic                 as P
+import           Plutarch.Num                     (PNum)
+import           Plutarch.Prelude                 (DerivePlutusType (..),
+                                                   Generic, PBool (..),
+                                                   PByteString, PEq (..),
+                                                   PInteger,
+                                                   PIntegral (pdiv, pquot, prem),
+                                                   PIsListLike, PListLike (..),
+                                                   PMaybe (..), POrd,
+                                                   PPair (..),
+                                                   PPartialOrd ((#<), (#<=)),
+                                                   PShow, PTryFrom,
+                                                   PlutusType (..),
+                                                   PlutusTypeScott,
+                                                   TermCont (runTermCont), Type,
+                                                   pall, pany, pcon, pconcat,
+                                                   pconstant, pelem, pfield,
+                                                   pfilter, pfix, pfoldl, pif,
+                                                   plam, plength, plengthBS,
+                                                   pletFields, pletFieldsC,
+                                                   pmap, pmatch, pmatchC, pnot,
+                                                   precList, psliceBS, pto,
+                                                   ptraceInfoError, ptryFrom,
+                                                   tcont, (#&&))
+import qualified PlutusCore                       as PLC
+import           Prelude
 
 type PPosixTimeRange = PInterval PPosixTime
 
@@ -838,7 +870,7 @@ pand'List ts' =
     ts -> foldl1 (\res x -> pand' # res # x) ts
 
 pcond ::  [(Term s PBool, Term s a)] -> Term s a -> Term s a
-pcond [] def = def
+pcond [] def                  = def
 pcond ((cond, x) : conds) def = pif cond x $ pcond conds def
 
 (#>) :: (POrd t) => Term s t -> Term s t -> Term s PBool
@@ -909,7 +941,7 @@ pvalidityRangeStart = phoistAcyclic $ plam $ \timeRange -> P.do
 
 data PCustomFiniteRange (s :: S) = PCustomFiniteRange
   { from :: Term s PPosixTime
-  , to :: Term s PPosixTime
+  , to   :: Term s PPosixTime
   }
   deriving stock (Generic)
   deriving anyclass

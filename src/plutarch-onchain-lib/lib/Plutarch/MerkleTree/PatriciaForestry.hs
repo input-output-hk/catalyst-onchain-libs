@@ -1,10 +1,17 @@
+{-# LANGUAGE OverloadedRecordDot   #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE OverloadedRecordDot   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-|
+Module      : Plutarch.MerkleTree.PatriciaForestry
+Description : Merkle trees in Plutarch
+Copyright   : (c) Philip DiSarro, 2024
+Stability   : experimental
+
+-}
 module Plutarch.MerkleTree.PatriciaForestry(
   pblake2b_256_digest_size,
   MerklePatriciaForestry(..),
@@ -33,8 +40,10 @@ module Plutarch.MerkleTree.PatriciaForestry(
 import           Plutarch.Crypto              (pblake2b_256)
 import           Plutarch.DataRepr
 import           Plutarch.Lift
-import           Plutarch.MerkleTree.Helpers  (pcombine, pnibble, psuffix, pnibbles)
-import           Plutarch.MerkleTree.Merkling (pnull_hash, pmerkle_16, psparse_merkle_16)
+import           Plutarch.MerkleTree.Helpers  (pcombine, pnibble, pnibbles,
+                                               psuffix)
+import           Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash,
+                                               psparse_merkle_16)
 import           Plutarch.Prelude
 import           PlutusLedgerApi.V2           (BuiltinByteString)
 import qualified PlutusTx
