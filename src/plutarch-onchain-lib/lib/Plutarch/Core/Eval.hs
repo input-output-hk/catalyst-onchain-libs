@@ -68,7 +68,7 @@ evalWithArgsT cfg x args = do
 writePlutusScript :: Config -> String -> FilePath -> ClosedTerm a -> IO ()
 writePlutusScript cfg title filepath term = do
   case evalT cfg term of
-    Left e -> putStrLn (show e)
+    Left e -> print e
     Right (script, _, _) -> do
       let
         scriptType = "PlutusScriptV2" :: String
@@ -77,16 +77,13 @@ writePlutusScript cfg title filepath term = do
       LBS.writeFile filepath content
 
 writePlutusScriptTraceBind :: String -> FilePath -> ClosedTerm a -> IO ()
-writePlutusScriptTraceBind title filepath term =
-  writePlutusScript (Tracing LogInfo DoTracingAndBinds) title filepath term
+writePlutusScriptTraceBind = writePlutusScript (Tracing LogInfo DoTracingAndBinds)
 
 writePlutusScriptTrace :: String -> FilePath -> ClosedTerm a -> IO ()
-writePlutusScriptTrace title filepath term =
-  writePlutusScript (Tracing LogInfo DoTracing) title filepath term
+writePlutusScriptTrace = writePlutusScript (Tracing LogInfo DoTracing)
 
 writePlutusScriptNoTrace :: String -> FilePath -> ClosedTerm a -> IO ()
-writePlutusScriptNoTrace title filepath term =
-  writePlutusScript NoTracing title filepath term
+writePlutusScriptNoTrace = writePlutusScript NoTracing
 
 comp :: ClosedTerm a -> Script
 comp t = either (error . unpack) id $ compile (Tracing LogInfo DoTracing) t
