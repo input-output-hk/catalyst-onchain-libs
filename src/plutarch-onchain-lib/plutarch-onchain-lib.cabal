@@ -21,6 +21,9 @@ common lang
                       DeriveGeneric StandaloneDeriving DeriveLift FlexibleContexts
                       GeneralizedNewtypeDeriving DeriveFunctor DeriveFoldable
                       DeriveTraversable ImportQualifiedPost NumericUnderscores
+                      LambdaCase DerivingStrategies KindSignatures TypeApplications
+                      DataKinds TypeOperators GADTs ViewPatterns TypeFamilies
+                      DeriveAnyClass DerivingVia
   ghc-options: -Wall -Wnoncanonical-monad-instances -Wunused-packages
                 -Wincomplete-uni-patterns -Wincomplete-record-updates
                 -Wredundant-constraints -Widentities
@@ -29,6 +32,17 @@ library
   import: lang
   exposed-modules:
     Plutarch.Lib
+    Plutarch.Core.Utils
+    Plutarch.MerkleTree.Helpers
+    Plutarch.MerkleTree.Merkling
+    Plutarch.MerkleTree.PatriciaForestry
   hs-source-dirs: lib
   build-depends:
-    base >= 4.14 && < 4.20
+    base >= 4.14 && < 4.20,
+    plutarch,
+    plutarch-ledger-api,
+    plutus-core,
+    bytestring,
+    text,
+    plutus-tx,
+    plutus-ledger-api
