@@ -69,6 +69,7 @@ test-suite plutarch-onchain-lib-tests
     plutarch-onchain-lib,
     tasty,
     tasty-hunit,
+    tasty-quickcheck,
     bytestring,
     plutarch,
     plutus-ledger-api,

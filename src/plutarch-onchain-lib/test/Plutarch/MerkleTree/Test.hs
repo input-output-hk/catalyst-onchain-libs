@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QualifiedDo       #-}
 {-| Tests for merkle tree
 -}
 module Plutarch.MerkleTree.Test(
@@ -14,6 +15,7 @@ import           Cardano.Crypto.DSIGN.EcdsaSecp256k1  (EcdsaSecp256k1DSIGN,
                                                        toMessageHash)
 import           Data.ByteString                      (ByteString)
 import qualified Data.ByteString                      as BS
+import           Data.Word                            (Word8)
 import           Numeric                              (readHex)
 import           Plutarch.Builtin                     (pforgetData,
                                                        pserialiseData)
@@ -25,6 +27,12 @@ import           Plutarch.Core.Utils                  (pand'List,
                                                        pintToByteString)
 import           Plutarch.Crypto                      (pblake2b_256,
                                                        pverifyEcdsaSecp256k1Signature)
+import           Plutarch.MerkleTree.Helpers          (pcombine, pnibble,
+                                                       pnibbles, psuffix)
+import           Plutarch.MerkleTree.Merkling         (pmerkle_4, pnull_hash,
+                                                       pnull_hash_2,
+                                                       pnull_hash_4,
+                                                       pnull_hash_8)
 import           Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
                                                        PMerklePatriciaForestry (..),
                                                        PProof (..),
@@ -32,12 +40,48 @@ import           Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
                                                        ProofStep (..), pdelete,
                                                        pfrom_root, phas,
                                                        pinsert, pupdate)
+import qualified Plutarch.Monadic                     as P
 import           Plutarch.Prelude
 import qualified PlutusCore.Crypto.Hash               as Hash
 import           PlutusLedgerApi.V2                   (Address (..),
                                                        Credential (..))
 import           Test.Tasty
 import           Test.Tasty.HUnit
+import           Test.Tasty.QuickCheck                (Arbitrary (..), Gen,
+                                                       Property, choose, forAll,
+                                                       vectorOf)
+import           Test.Tasty.QuickCheck                as QC
+
+tests :: TestTree
+tests = testGroup "Merkle tree"
+  [ testGroup "Merkle Patricia Forestry Tests"
+    [ testCase "Verify Bitcoin Block 845999" $
+        passert test_verify_bitcoin_block_845999
+    , testCase "Insert Bitcoin Block 845602" $
+        passert test_insert_bitcoin_block_845602
+    , testCase "Has Kumquat" $
+        passert example_kumquat
+    , testCase "Example has" $
+        passert example_has
+    , testCase "Example Insert" $
+        passert example_insert
+    , testCase "Example Delete" $
+        passert example_delete
+    , testCase "Example Update" $
+        passert example_update
+    , testCase "Example Claim Proof" $
+        passert test_prove_eth_allocation
+    , testCase "Example E2E Claim" $
+        passert test_prove_eth_claim
+    ]
+  , testGroup "Merkle tests" [
+      QC.testProperty "merkle_4 property" merkle_4_test,
+      testCase "nibble examples" $ passert examplesNibble,
+      testCase "nibbles examples" $ passert examplesNibbles,
+      testCase "suffix examples" $ passert examplesSuffix,
+      testCase "combine null hashes" $ passert combineNullHash
+    ]
+  ]
 
 hexToBS :: String -> BS.ByteString
 hexToBS = BS.pack . map (fst . head . readHex) . chunksOf 2
@@ -350,28 +394,6 @@ example_update =
   pupdate # ptrie # pbanana # proof_banana # (pencodeUtf8 # pconstant "🍌") # (pencodeUtf8 # pconstant "🍆")
     #== updated_banana
 
-tests :: TestTree
-tests = testGroup "Merkle Patricia Forestry Tests"
-  [ testCase "Verify Bitcoin Block 845999" $
-      passert test_verify_bitcoin_block_845999
-  , testCase "Insert Bitcoin Block 845602" $
-      passert test_insert_bitcoin_block_845602
-  , testCase "Has Kumquat" $
-      passert example_kumquat
-  , testCase "Example has" $
-      passert example_has
-  , testCase "Example Insert" $
-      passert example_insert
-  , testCase "Example Delete" $
-      passert example_delete
-  , testCase "Example Update" $
-      passert example_update
-  , testCase "Example Claim Proof" $
-      passert test_prove_eth_allocation
-  , testCase "Example E2E Claim" $
-      passert test_prove_eth_claim
-  ]
-
 -- Apricot
 papricot :: ClosedTerm PByteString
 papricot = pconstant "apricot[uid: 0]"
@@ -603,3 +625,73 @@ proof_mango = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
 
 without_mango :: ClosedTerm PMerklePatriciaForestry
 without_mango = pfrom_root # phexByteStr "c683f99382df709f322b957c3ff828ab10cb2b6a855458e4b3d23fbea83e7a0e"
+
+genByteString :: Gen BS.ByteString
+genByteString = do
+  len <- choose (0, 100)  -- You can choose the length range you prefer
+  bytes <- vectorOf len (arbitrary :: Gen Word8)
+  return $ BS.pack bytes
+
+genFourBytearrays :: Gen [BS.ByteString]
+genFourBytearrays = vectorOf 4 arbitrary
+
+instance Arbitrary BS.ByteString where
+  arbitrary = genByteString
+
+pmerkle_4_test :: ClosedTerm (PBuiltinList PByteString :--> PBool)
+pmerkle_4_test = plam $ \nodes -> P.do
+  a <- plet $ phead # nodes
+  aRest <- plet (ptail # nodes)
+  b <- plet $ phead # aRest
+  bRest <- plet (ptail # aRest)
+  c <- plet $ phead # bRest
+  d <- plet $ phead # (ptail # bRest)
+
+  root <- plet $ pcombine # (pcombine # a # b) # (pcombine # c # d)
+
+  pand'List
+    [ pmerkle_4 # 0 # a # (pcombine # c # d) # b #== root
+    , pmerkle_4 # 1 # b # (pcombine # c # d) # a #== root
+    , pmerkle_4 # 2 # c # (pcombine # a # b) # d #== root
+    , pmerkle_4 # 3 # d # (pcombine # a # b) # c #== root
+    ]
+
+combineNullHash :: Term s PBool
+combineNullHash =
+  pand'List
+    [ pcombine # pnull_hash # pnull_hash #== pnull_hash_2
+    , pcombine # pnull_hash_2 # pnull_hash_2 #== pnull_hash_4
+    , pcombine # pnull_hash_4 # pnull_hash_4 #== pnull_hash_8
+    ]
+
+examplesSuffix :: Term s PBool
+examplesSuffix =
+  pand'List
+    [ psuffix # phexByteStr "abcd456789" # 0 #== phexByteStr "ffabcd456789"
+    , psuffix # phexByteStr "abcd456789" # 1 #== phexByteStr "000bcd456789"
+    , psuffix # phexByteStr "abcd456789" # 2 #== phexByteStr "ffcd456789"
+    , psuffix # phexByteStr "abcd456789" # 4 #== phexByteStr "ff456789"
+    , psuffix # phexByteStr "abcd456789" # 5 #== phexByteStr "00056789"
+    , psuffix # phexByteStr "abcd456789" # 10 #== phexByteStr "ff"
+    ]
+
+examplesNibbles :: Term s PBool
+examplesNibbles =
+  pand'List
+    [ pnibbles # phexByteStr "0123456789" # 2 # 2 #== pconstant (BS.pack [])
+    , pnibbles # phexByteStr "0123456789" # 2 # 3 #== pconstant (BS.pack [2])
+    , pnibbles # phexByteStr "0123456789" # 4 # 8 #== pconstant (BS.pack [4, 5, 6, 7])
+    , pnibbles # phexByteStr "0123456789" # 3 # 6 #== pconstant (BS.pack [3, 4, 5])
+    , pnibbles # phexByteStr "0123456789" # 1 # 7 #== pconstant (BS.pack [1, 2, 3, 4, 5, 6])
+    ]
+
+examplesNibble :: Term s PBool
+examplesNibble =
+  pand'List
+    [ pnibble # phexByteStr "ab" # 0 #== 10
+    , pnibble # phexByteStr "ab" # 1 #== 11
+    ]
+
+merkle_4_test :: Property
+merkle_4_test = forAll genFourBytearrays $ \nodes ->
+  plift $ pmerkle_4_test # pconstant @(PBuiltinList PByteString) nodes

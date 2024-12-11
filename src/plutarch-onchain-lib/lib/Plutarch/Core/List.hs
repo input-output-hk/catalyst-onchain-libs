@@ -103,18 +103,6 @@ phasNSetBits n bs =
   let setBits = pcountSetBits # bs
    in setBits #== n
 
--- let (_, result2, _) = fromRight (error "") (evalTerm NoTracing (pisUniqueSet # 10 # pconstant [0..9])
--- TODO: Update CHaP and Plutarch
--- pisUniqueSet :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
--- pisUniqueSet = phoistAcyclic $ plam $ \n xs ->
---   let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant True
---   in (pcountSetBits # flagUniqueBits #== (pbuiltinListLengthFast # n # xs))
-
--- phasNUniqueElements :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
--- phasNUniqueElements = phoistAcyclic $ plam $ \n xs ->
---   let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant True
---   in (pcountSetBits # flagUniqueBits #== n)
-
 -- exists to bench against pisUniqueSet
 _pIsUnique :: Term s (PBuiltinList PInteger :--> PBool)
 _pIsUnique = phoistAcyclic $ plam $ \list ->
