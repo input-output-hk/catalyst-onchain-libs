@@ -35,6 +35,7 @@ library
     Plutarch.Core.Crypto
     Plutarch.Core.Eval
     Plutarch.Core.List
+    Plutarch.Core.PlutusDataList
     Plutarch.Core.Utils
     Plutarch.MerkleTree.Helpers
     Plutarch.MerkleTree.Merkling
@@ -46,6 +47,7 @@ library
     plutarch-ledger-api,
     plutus-core,
     bytestring,
+    generics-sop,
     text,
     plutus-tx,
     plutus-ledger-api,
