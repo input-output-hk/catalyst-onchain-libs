@@ -15,7 +15,6 @@ import           Cardano.Crypto.DSIGN.EcdsaSecp256k1  (EcdsaSecp256k1DSIGN,
                                                        toMessageHash)
 import           Data.ByteString                      (ByteString)
 import qualified Data.ByteString                      as BS
-import           Data.Word                            (Word8)
 import           Numeric                              (readHex)
 import           Plutarch.Builtin                     (pforgetData,
                                                        pserialiseData)
@@ -45,12 +44,13 @@ import           Plutarch.Prelude
 import qualified PlutusCore.Crypto.Hash               as Hash
 import           PlutusLedgerApi.V2                   (Address (..),
                                                        Credential (..))
+import           Test.QuickCheck.Instances.ByteString ()
 import           Test.Tasty
 import           Test.Tasty.HUnit
+import qualified Test.Tasty.QuickCheck                as QC
 import           Test.Tasty.QuickCheck                (Arbitrary (..), Gen,
-                                                       Property, choose, forAll,
+                                                       Property, forAll,
                                                        vectorOf)
-import           Test.Tasty.QuickCheck                as QC
 
 tests :: TestTree
 tests = testGroup "Merkle tree"
@@ -626,17 +626,8 @@ proof_mango = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
 without_mango :: ClosedTerm PMerklePatriciaForestry
 without_mango = pfrom_root # phexByteStr "c683f99382df709f322b957c3ff828ab10cb2b6a855458e4b3d23fbea83e7a0e"
 
-genByteString :: Gen BS.ByteString
-genByteString = do
-  len <- choose (0, 100)  -- You can choose the length range you prefer
-  bytes <- vectorOf len (arbitrary :: Gen Word8)
-  return $ BS.pack bytes
-
 genFourBytearrays :: Gen [BS.ByteString]
 genFourBytearrays = vectorOf 4 arbitrary
-
-instance Arbitrary BS.ByteString where
-  arbitrary = genByteString
 
 pmerkle_4_test :: ClosedTerm (PBuiltinList PByteString :--> PBool)
 pmerkle_4_test = plam $ \nodes -> P.do
@@ -647,13 +638,13 @@ pmerkle_4_test = plam $ \nodes -> P.do
   c <- plet $ phead # bRest
   d <- plet $ phead # (ptail # bRest)
 
-  root <- plet $ pcombine # (pcombine # a # b) # (pcombine # c # d)
+  root_ <- plet $ pcombine # (pcombine # a # b) # (pcombine # c # d)
 
   pand'List
-    [ pmerkle_4 # 0 # a # (pcombine # c # d) # b #== root
-    , pmerkle_4 # 1 # b # (pcombine # c # d) # a #== root
-    , pmerkle_4 # 2 # c # (pcombine # a # b) # d #== root
-    , pmerkle_4 # 3 # d # (pcombine # a # b) # c #== root
+    [ pmerkle_4 # 0 # a # (pcombine # c # d) # b #== root_
+    , pmerkle_4 # 1 # b # (pcombine # c # d) # a #== root_
+    , pmerkle_4 # 2 # c # (pcombine # a # b) # d #== root_
+    , pmerkle_4 # 3 # d # (pcombine # a # b) # c #== root_
     ]
 
 combineNullHash :: Term s PBool

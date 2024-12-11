@@ -75,3 +75,4 @@ test-suite plutarch-onchain-lib-tests
     plutus-ledger-api,
     cardano-crypto-class,
     plutus-core,
+    quickcheck-instances
