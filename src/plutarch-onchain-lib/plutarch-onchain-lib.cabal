@@ -34,6 +34,7 @@ library
     Plutarch.Lib
     Plutarch.Core.Crypto
     Plutarch.Core.Eval
+    Plutarch.Core.List
     Plutarch.Core.Utils
     Plutarch.MerkleTree.Helpers
     Plutarch.MerkleTree.Merkling
