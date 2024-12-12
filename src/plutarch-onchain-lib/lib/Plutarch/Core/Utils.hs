@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                  #-}
 {-# LANGUAGE OverloadedRecordDot  #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PolyKinds            #-}
@@ -13,8 +14,15 @@ Stability   : experimental
 
 -}
 module Plutarch.Core.Utils(
+  pfail,
+  pdebug,
+  PTxOutH(..),
   PPosixTimeRange,
   PCustomFiniteRange (..),
+  PPosixFiniteRange(..),
+  PMintingScriptInfoHRec,
+  pletFieldsMinting,
+  ptoFiniteRange,
   pletFieldsSpending,
   pletFieldsRewarding,
   pisRewarding,
@@ -80,6 +88,7 @@ module Plutarch.Core.Utils(
   pmapAndConvertList,
   pintToByteString,
   pvalidityRangeStart,
+  pvalidityRangeEnd,
   ptoCustomFiniteRange,
   ptoCustomFiniteRangeH,
   punwrapPosixTime,
@@ -147,7 +156,7 @@ import           Plutarch.Prelude                 (DerivePlutusType (..),
                                                    PMaybe (..), POrd,
                                                    PPair (..),
                                                    PPartialOrd ((#<), (#<=)),
-                                                   PShow, PTryFrom,
+                                                   PShow, PString, PTryFrom,
                                                    PlutusType (..),
                                                    PlutusTypeScott,
                                                    TermCont (runTermCont), Type,
@@ -163,7 +172,77 @@ import           Plutarch.Prelude                 (DerivePlutusType (..),
 import qualified PlutusCore                       as PLC
 import           Prelude
 
+pfail ::
+  forall (s :: S) a.
+  Term s PString ->
+  Term s a
+#ifdef DEBUG
+pfail = ptraceInfoError
+#else
+--- ^ Use this version for production. Smaller script size/exunits, but you won't get debugging messages
+pfail _ = perror
+#endif
+--- ^ Use this version for testing. You will need modify node parameters to not blow up on TxSize/Exunits
+
+pdebug ::
+  forall (s :: S).
+  Term s PString ->
+  Term s PBool ->
+  Term s PBool
+#ifdef DEBUG
+pdebug = ptraceInfoIfFalse
+--- ^ Use this version for testing. You will need modify node parameters to not blow up on TxSize/Exunits
+#else
+pdebug _ b = b
+--- ^ Use this version for production. Smaller script size/exunits, but you won't get debugging messages
+#endif
+
+data PTxOutH (s :: S) =
+  PTxOutH
+    { ptxOutAddress         :: Term s PAddress
+    , ptxOutValue           :: Term s (PValue 'Sorted 'Positive)
+    , ptxOutDatum           :: Term s POutputDatum
+    , ptxOutReferenceScript :: Term s (PMaybeData PScriptHash)
+    }
+
 type PPosixTimeRange = PInterval PPosixTime
+
+data PPosixFiniteRange (s :: S) = PPosixFiniteRange
+  { from :: Term s PPosixTime
+  , to   :: Term s PPosixTime
+  }
+  deriving stock (Generic)
+  deriving anyclass
+    ( PlutusType
+    )
+
+instance DerivePlutusType PPosixFiniteRange where
+  type DPTStrat _ = PlutusTypeScott
+
+ptoFiniteRange :: Term s (PPosixTimeRange :--> PPosixFiniteRange)
+ptoFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
+  timeRangeF <- pletFields @'["from", "to"] timeRange
+  PLowerBound lb <- pmatch timeRangeF.from
+  PFinite ((pfield @"_0" #) -> start) <- pmatch (pfield @"_0" # lb)
+  PUpperBound ub <- pmatch timeRangeF.to
+  PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
+  pcon $ PPosixFiniteRange { from = start, to = end }
+
+type PMintingScriptInfoHRec (s :: S) =
+  HRec
+    '[ '("_0", Term s (PAsData PCurrencySymbol))
+     ]
+
+pletFieldsMinting :: forall {s :: S} {r :: PType}
+   . Term s PData
+  -> (Term s (PAsData PCurrencySymbol) -> Term s r)
+  -> Term s r
+pletFieldsMinting term = runTermCont $ do
+  constrPair <- tcont $ plet $ pasConstr # term
+  fields <- tcont $ plet $ psndBuiltin # constrPair
+  checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 0) fields perror
+  let cs = punsafeCoerce @_ @_ @(PAsData PCurrencySymbol) $ phead # checkedFields
+  tcont $ \f -> f cs
 
 type PScriptInfoHRec (s :: S) =
   HRec
@@ -171,6 +250,12 @@ type PScriptInfoHRec (s :: S) =
      , '("_1", Term s (PAsData (PMaybeData PDatum)))
      ]
 
+-- Example usage:
+--
+-- @
+-- pletFieldsSpending spendingScriptTerm $ \scriptInfoHRec ->
+--   punsafeCoerce @_ @_ @PSignedObservation (pto scriptInfoHRec._1)
+-- @
 pletFieldsSpending :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PScriptInfoHRec s -> Term s r) -> Term s r
 pletFieldsSpending term = runTermCont $ do
   constrPair <- tcont $ plet $ pasConstr # pforgetData term
@@ -820,7 +905,7 @@ pfirstTokenNameWithCS = phoistAcyclic $
 phasUTxO ::
   ClosedTerm
     ( PTxOutRef
-        :--> PBuiltinList PTxInInfo
+        :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
     )
 phasUTxO = phoistAcyclic $
@@ -939,9 +1024,16 @@ pvalidityRangeStart = phoistAcyclic $ plam $ \timeRange -> P.do
   PFinite ((pfield @"_0" #) -> posixTime) <- pmatch (pfield @"_0" # lb)
   pmatch posixTime $ \(PPosixTime pt) -> pmatch pt $ \(PDataNewtype t) -> t
 
+pvalidityRangeEnd :: Term s (PPosixTimeRange :--> PAsData PInteger)
+pvalidityRangeEnd = phoistAcyclic $ plam $ \timeRange -> P.do
+  PInterval ((pfield @"to" #) -> to_) <- pmatch timeRange
+  PUpperBound ub <- pmatch to_
+  PFinite ((pfield @"_0" #) -> posixTime) <- pmatch (pfield @"_0" # ub)
+  pmatch posixTime $ \(PPosixTime pt) -> pmatch pt $ \(PDataNewtype t) -> t
+
 data PCustomFiniteRange (s :: S) = PCustomFiniteRange
-  { from :: Term s PPosixTime
-  , to   :: Term s PPosixTime
+  { from' :: Term s PPosixTime
+  , to'   :: Term s PPosixTime
   }
   deriving stock (Generic)
   deriving anyclass
@@ -958,7 +1050,7 @@ ptoCustomFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
   PFinite ((pfield @"_0" #) -> start) <- pmatch (pfield @"_0" # lb)
   PUpperBound ub <- pmatch timeRangeF.to
   PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
-  pcon $ PCustomFiniteRange { from = start, to = end }
+  pcon $ PCustomFiniteRange { from' = start, to' = end }
 
 ptoCustomFiniteRangeH :: Term s PPosixTimeRange -> TermCont @r s (Term s PInteger, Term s PInteger)
 ptoCustomFiniteRangeH timeRange = do
