@@ -4,6 +4,8 @@ module Plutarch.Core.List (
   pbuiltinListLengthFast,
   penforceNSpendRedeemers,
   phasNSetBits,
+  pisUniqueSet,
+  phasNUniqueElements,
   emptyByteArray
 ) where
 
@@ -11,7 +13,7 @@ import           Plutarch                    (ClosedTerm, Config (NoTracing),
                                               PType, S, Term, perror, pfix,
                                               phoistAcyclic, plam, plet, pto,
                                               type (:-->), (#$), (#))
-import           Plutarch.Bitwise            (pcountSetBits)
+import           Plutarch.Bitwise            (pcountSetBits, pwriteBits)
 import           Plutarch.Bool               (PBool, PEq ((#==)),
                                               PPartialOrd ((#<), (#<=)), pif,
                                               pnot)
@@ -153,3 +155,13 @@ penforceNSpendRedeemers n rdmrs =
                 (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
                 perror
      in isLastSpend # (pdropFast # (n - 1) # pto rdmrs)
+
+pisUniqueSet :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
+pisUniqueSet = phoistAcyclic $ plam $ \n xs ->
+  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant [True]
+  in (pcountSetBits # flagUniqueBits #== (pbuiltinListLengthFast # n # xs))
+
+phasNUniqueElements :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
+phasNUniqueElements = phoistAcyclic $ plam $ \n xs ->
+  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant [True]
+  in (pcountSetBits # flagUniqueBits #== n)
