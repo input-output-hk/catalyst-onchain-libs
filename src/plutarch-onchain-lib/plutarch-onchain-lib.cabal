@@ -37,6 +37,7 @@ library
     Plutarch.Core.List
     Plutarch.Core.PlutusDataList
     Plutarch.Core.Utils
+    Plutarch.Extra.Record
     Plutarch.MerkleTree.Helpers
     Plutarch.MerkleTree.Merkling
     Plutarch.MerkleTree.PatriciaForestry
