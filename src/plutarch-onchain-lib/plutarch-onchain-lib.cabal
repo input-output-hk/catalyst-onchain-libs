@@ -34,7 +34,10 @@ library
     Plutarch.Lib
     Plutarch.Core.Crypto
     Plutarch.Core.Eval
+    Plutarch.Core.List
+    Plutarch.Core.PlutusDataList
     Plutarch.Core.Utils
+    Plutarch.Extra.Record
     Plutarch.MerkleTree.Helpers
     Plutarch.MerkleTree.Merkling
     Plutarch.MerkleTree.PatriciaForestry
@@ -45,6 +48,7 @@ library
     plutarch-ledger-api,
     plutus-core,
     bytestring,
+    generics-sop,
     text,
     plutus-tx,
     plutus-ledger-api,
@@ -68,8 +72,10 @@ test-suite plutarch-onchain-lib-tests
     plutarch-onchain-lib,
     tasty,
     tasty-hunit,
+    tasty-quickcheck,
     bytestring,
     plutarch,
     plutus-ledger-api,
     cardano-crypto-class,
     plutus-core,
+    quickcheck-instances
