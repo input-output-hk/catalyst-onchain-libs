@@ -106,6 +106,9 @@ module Plutarch.Core.Utils(
   pvalueSingleton,
   pmapData,
   ppairDataBuiltinRaw,
+  pvalidateConditions,
+  pisPrefixOf,
+  pcountInputsFromCred
 ) where
 
 import           Data.List                        (foldl')
@@ -157,7 +160,7 @@ import           Plutarch.Prelude                 (DerivePlutusType (..),
                                                    PPair (..),
                                                    PPartialOrd ((#<), (#<=)),
                                                    PShow, PString, PTryFrom,
-                                                   PlutusType (..),
+                                                   PUnit, PlutusType (..),
                                                    PlutusTypeScott,
                                                    TermCont (runTermCont), Type,
                                                    pall, pany, pcon, pconcat,
@@ -1138,3 +1141,23 @@ pmapData = punsafeBuiltin PLC.MapData
 
 ppairDataBuiltinRaw :: Term s (PData :--> PData :--> PBuiltinPair PData PData)
 ppairDataBuiltinRaw = punsafeBuiltin PLC.MkPairData
+
+-- | Strictly evaluates a list of boolean expressions.
+-- If all the expressions evaluate to true, returns unit, otherwise throws an error.
+pvalidateConditions :: [Term s PBool] -> Term s PUnit
+pvalidateConditions conds =
+  pif (pand'List conds)
+      (pconstant ())
+      perror
+
+pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
+pcountInputsFromCred =
+  phoistAcyclic $ plam $ \cred txIns ->
+    let go = pfix #$ plam $ \self n ->
+              pelimList
+                (\x xs ->
+                  let inputCred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+                   in pif (cred #== inputCred) (self # (n + 1) # xs) (self # n # xs)
+                )
+                n
+     in go # 0 # txIns
