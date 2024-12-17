@@ -904,7 +904,7 @@ pfirstTokenNameWithCS = phoistAcyclic $
 -}
 phasUTxO ::
   ClosedTerm
-    ( PTxOutRef
+    ( PAsData PTxOutRef
         :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
     )
