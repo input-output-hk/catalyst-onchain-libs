@@ -20,7 +20,7 @@ module Plutarch.Core.Utils(
   PPosixTimeRange,
   PCustomFiniteRange (..),
   PPosixFiniteRange(..),
-  PMintingScriptInfoHRec,
+  PMintingScriptHRec,
   pletFieldsMinting,
   ptoFiniteRange,
   pletFieldsSpending,
@@ -231,21 +231,18 @@ ptoFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
   PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
   pcon $ PPosixFiniteRange { from = start, to = end }
 
-type PMintingScriptInfoHRec (s :: S) =
+type PMintingScriptHRec (s :: S) =
   HRec
     '[ '("_0", Term s (PAsData PCurrencySymbol))
      ]
 
-pletFieldsMinting :: forall {s :: S} {r :: PType}
-   . Term s PData
-  -> (Term s (PAsData PCurrencySymbol) -> Term s r)
-  -> Term s r
+pletFieldsMinting :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PMintingScriptHRec s -> Term s r) -> Term s r
 pletFieldsMinting term = runTermCont $ do
-  constrPair <- tcont $ plet $ pasConstr # term
+  constrPair <- tcont $ plet $ pasConstr # pforgetData term
   fields <- tcont $ plet $ psndBuiltin # constrPair
   checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 0) fields perror
-  let cs = punsafeCoerce @_ @_ @(PAsData PCurrencySymbol) $ phead # checkedFields
-  tcont $ \f -> f cs
+  let mintCS = punsafeCoerce @_ @_ @(PAsData PCurrencySymbol) $ phead # checkedFields
+  tcont $ \f -> f $ HCons (Labeled @"_0" mintCS) HNil
 
 type PScriptInfoHRec (s :: S) =
   HRec
