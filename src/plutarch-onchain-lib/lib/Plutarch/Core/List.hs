@@ -158,10 +158,10 @@ penforceNSpendRedeemers n rdmrs =
 
 pisUniqueSet :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
 pisUniqueSet = phoistAcyclic $ plam $ \n xs ->
-  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant [True]
+  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant True
   in (pcountSetBits # flagUniqueBits #== (pbuiltinListLengthFast # n # xs))
 
 phasNUniqueElements :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
 phasNUniqueElements = phoistAcyclic $ plam $ \n xs ->
-  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant [True]
+  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant True
   in (pcountSetBits # flagUniqueBits #== n)
