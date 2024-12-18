@@ -20,7 +20,7 @@ module Plutarch.Core.Utils(
   PPosixTimeRange,
   PCustomFiniteRange (..),
   PPosixFiniteRange(..),
-  PMintingScriptInfoHRec,
+  PMintingScriptHRec,
   pletFieldsMinting,
   ptoFiniteRange,
   pletFieldsSpending,
@@ -106,6 +106,9 @@ module Plutarch.Core.Utils(
   pvalueSingleton,
   pmapData,
   ppairDataBuiltinRaw,
+  pvalidateConditions,
+  pisPrefixOf,
+  pcountInputsFromCred
 ) where
 
 import           Data.List                        (foldl')
@@ -157,7 +160,7 @@ import           Plutarch.Prelude                 (DerivePlutusType (..),
                                                    PPair (..),
                                                    PPartialOrd ((#<), (#<=)),
                                                    PShow, PString, PTryFrom,
-                                                   PlutusType (..),
+                                                   PUnit, PlutusType (..),
                                                    PlutusTypeScott,
                                                    TermCont (runTermCont), Type,
                                                    pall, pany, pcon, pconcat,
@@ -228,21 +231,18 @@ ptoFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
   PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
   pcon $ PPosixFiniteRange { from = start, to = end }
 
-type PMintingScriptInfoHRec (s :: S) =
+type PMintingScriptHRec (s :: S) =
   HRec
     '[ '("_0", Term s (PAsData PCurrencySymbol))
      ]
 
-pletFieldsMinting :: forall {s :: S} {r :: PType}
-   . Term s PData
-  -> (Term s (PAsData PCurrencySymbol) -> Term s r)
-  -> Term s r
+pletFieldsMinting :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PMintingScriptHRec s -> Term s r) -> Term s r
 pletFieldsMinting term = runTermCont $ do
-  constrPair <- tcont $ plet $ pasConstr # term
+  constrPair <- tcont $ plet $ pasConstr # pforgetData term
   fields <- tcont $ plet $ psndBuiltin # constrPair
   checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 0) fields perror
-  let cs = punsafeCoerce @_ @_ @(PAsData PCurrencySymbol) $ phead # checkedFields
-  tcont $ \f -> f cs
+  let mintCS = punsafeCoerce @_ @_ @(PAsData PCurrencySymbol) $ phead # checkedFields
+  tcont $ \f -> f $ HCons (Labeled @"_0" mintCS) HNil
 
 type PScriptInfoHRec (s :: S) =
   HRec
@@ -904,7 +904,7 @@ pfirstTokenNameWithCS = phoistAcyclic $
 -}
 phasUTxO ::
   ClosedTerm
-    ( PTxOutRef
+    ( PAsData PTxOutRef
         :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
     )
@@ -1138,3 +1138,23 @@ pmapData = punsafeBuiltin PLC.MapData
 
 ppairDataBuiltinRaw :: Term s (PData :--> PData :--> PBuiltinPair PData PData)
 ppairDataBuiltinRaw = punsafeBuiltin PLC.MkPairData
+
+-- | Strictly evaluates a list of boolean expressions.
+-- If all the expressions evaluate to true, returns unit, otherwise throws an error.
+pvalidateConditions :: [Term s PBool] -> Term s PUnit
+pvalidateConditions conds =
+  pif (pand'List conds)
+      (pconstant ())
+      perror
+
+pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
+pcountInputsFromCred =
+  phoistAcyclic $ plam $ \cred txIns ->
+    let go = pfix #$ plam $ \self n ->
+              pelimList
+                (\x xs ->
+                  let inputCred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+                   in pif (cred #== inputCred) (self # (n + 1) # xs) (self # n # xs)
+                )
+                n
+     in go # 0 # txIns

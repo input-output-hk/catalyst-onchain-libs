@@ -36,6 +36,7 @@ library
     Plutarch.Core.Eval
     Plutarch.Core.List
     Plutarch.Core.PlutusDataList
+    Plutarch.Core.Scripts
     Plutarch.Core.Utils
     Plutarch.Extra.Record
     Plutarch.MerkleTree.Helpers
