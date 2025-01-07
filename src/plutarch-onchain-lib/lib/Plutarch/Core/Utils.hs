@@ -108,72 +108,40 @@ module Plutarch.Core.Utils(
   ppairDataBuiltinRaw,
   pvalidateConditions,
   pisPrefixOf,
-  pcountInputsFromCred
+  pcountInputsFromCred,
+  psubtractValue,
+  pcountSetBits',
+  pwriteBits',
+  pindexBS'
 ) where
 
 import           Data.List                        (foldl')
 import qualified Data.Text                        as T
-import           Plutarch.Bool                    (pand')
-import           Plutarch.Builtin                 (PAsData, PBuiltinList (..),
-                                                   PBuiltinPair, PData,
-                                                   PDataNewtype (..), PIsData,
-                                                   pasConstr, pdata,
-                                                   pforgetData, pfromData,
-                                                   pfstBuiltin,
-                                                   ppairDataBuiltin,
-                                                   psndBuiltin)
-import           Plutarch.DataRepr.Internal.Field (HRec (..), Labeled (Labeled))
-import           Plutarch.Internal                (ClosedTerm, PType, S, Term,
-                                                   perror, phoistAcyclic, plet,
-                                                   punsafeBuiltin,
-                                                   punsafeCoerce, type (:-->),
-                                                   (#$), (#))
+import           Plutarch.Prelude                 
+
+import           Plutarch.DataRepr.Internal.Field 
 import qualified Plutarch.LedgerApi.AssocMap      as AssocMap
-import           Plutarch.LedgerApi.V3            (AmountGuarantees (NonZero, Positive),
-                                                   KeyGuarantees (Sorted),
-                                                   PAddress, PCredential (..),
-                                                   PCurrencySymbol, PDatum,
-                                                   PExtended (PFinite),
-                                                   PInterval (..),
-                                                   PLowerBound (PLowerBound),
-                                                   PMap (..), PMaybeData,
-                                                   POutputDatum (POutputDatum),
-                                                   PPosixTime (..), PPubKeyHash,
-                                                   PRedeemer, PScriptHash,
-                                                   PScriptInfo, PScriptPurpose,
-                                                   PTokenName, PTxInInfo,
-                                                   PTxOut, PTxOutRef,
-                                                   PUpperBound (PUpperBound),
-                                                   PValue (..))
+import           Plutarch.LedgerApi.V3            
 import           Plutarch.LedgerApi.Value         (padaSymbol, pnormalize,
                                                    pvalueOf)
 import qualified Plutarch.LedgerApi.Value         as Value
 import qualified Plutarch.Monadic                 as P
-import           Plutarch.Num                     (PNum)
-import           Plutarch.Prelude                 (DerivePlutusType (..),
-                                                   Generic, PBool (..),
-                                                   PByteString, PEq (..),
-                                                   PInteger,
-                                                   PIntegral (pdiv, pquot, prem),
-                                                   PIsListLike, PListLike (..),
-                                                   PMaybe (..), POrd,
-                                                   PPair (..),
-                                                   PPartialOrd ((#<), (#<=)),
-                                                   PShow, PString, PTryFrom,
-                                                   PUnit, PlutusType (..),
-                                                   PlutusTypeScott,
-                                                   TermCont (runTermCont), Type,
-                                                   pall, pany, pcon, pconcat,
-                                                   pconstant, pelem, pfield,
-                                                   pfilter, pfix, pfoldl, pif,
-                                                   plam, plength, plengthBS,
-                                                   pletFields, pletFieldsC,
-                                                   pmap, pmatch, pmatchC, pnot,
-                                                   precList, psliceBS, pto,
-                                                   ptraceInfoError, ptryFrom,
-                                                   tcont, (#&&))
+import           Plutarch.Prelude                 
+                                         
 import qualified PlutusCore                       as PLC
 import           Prelude
+import           Plutarch.Internal.Numeric
+import           Plutarch.Internal.Term 
+import           GHC.Generics (Generic)
+
+pcountSetBits' :: Term s (PByteString :--> PInteger)
+pcountSetBits' = punsafeBuiltin PLC.CountSetBits
+
+pwriteBits' :: forall (s :: S). Term s (PByteString :--> PBuiltinList PInteger :--> PBool :--> PByteString)
+pwriteBits' = punsafeBuiltin PLC.WriteBits
+
+pindexBS' :: Term s (PByteString :--> PInteger :--> PInteger)
+pindexBS' = punsafeBuiltin PLC.IndexByteString
 
 pfail ::
   forall (s :: S) a.
@@ -241,7 +209,7 @@ pletFieldsMinting term = runTermCont $ do
   constrPair <- tcont $ plet $ pasConstr # pforgetData term
   fields <- tcont $ plet $ psndBuiltin # constrPair
   checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 0) fields perror
-  let mintCS = punsafeCoerce @_ @_ @(PAsData PCurrencySymbol) $ phead # checkedFields
+  let mintCS = punsafeCoerce @(PAsData PCurrencySymbol) $ phead # checkedFields
   tcont $ \f -> f $ HCons (Labeled @"_0" mintCS) HNil
 
 type PScriptInfoHRec (s :: S) =
@@ -261,8 +229,8 @@ pletFieldsSpending term = runTermCont $ do
   constrPair <- tcont $ plet $ pasConstr # pforgetData term
   fields <- tcont $ plet $ psndBuiltin # constrPair
   checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 1) fields perror
-  let outRef = punsafeCoerce @_ @_ @(PAsData PTxOutRef) $ phead # checkedFields
-      datum = punsafeCoerce @_ @_ @(PAsData (PMaybeData PDatum)) $ phead # (ptail # checkedFields)
+  let outRef = punsafeCoerce @(PAsData PTxOutRef) $ phead # checkedFields
+      datum = punsafeCoerce @(PAsData (PMaybeData PDatum)) $ phead # (ptail # checkedFields)
   tcont $ \f -> f $ HCons (Labeled @"_0" outRef) (HCons (Labeled @"_1" datum) HNil)
 
 pletFieldsRewarding :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PScriptInfoHRec s -> Term s r) -> Term s r
@@ -270,8 +238,8 @@ pletFieldsRewarding term = runTermCont $ do
   constrPair <- tcont $ plet $ pasConstr # pforgetData term
   fields <- tcont $ plet $ psndBuiltin # constrPair
   checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 2) fields perror
-  let outRef = punsafeCoerce @_ @_ @(PAsData PTxOutRef) $ phead # checkedFields
-      datum = punsafeCoerce @_ @_ @(PAsData (PMaybeData PDatum)) $ phead # (ptail # checkedFields)
+  let outRef = punsafeCoerce @(PAsData PTxOutRef) $ phead # checkedFields
+      datum = punsafeCoerce @(PAsData (PMaybeData PDatum)) $ phead # (ptail # checkedFields)
   tcont $ \f -> f $ HCons (Labeled @"_0" outRef) (HCons (Labeled @"_1" datum) HNil)
 
 pisRewarding :: Term s (PAsData PScriptInfo) -> Term s PBool
@@ -310,7 +278,7 @@ ptryFromInlineDatum = phoistAcyclic $
 -- For outputs typically you should prefer to construct the expected output datum and compare it against the
 -- actual output datum thus entirely avoiding the need for decoding.
 pfromPDatum ::
-  forall (a :: S -> Type) (s :: S).
+  forall (a :: PType) (s :: S).
   PTryFrom PData a =>
   Term s (PDatum :--> a)
 pfromPDatum = phoistAcyclic $ plam $ flip ptryFrom fst . pto
@@ -534,7 +502,7 @@ paysAtleastValueToAddress ::
 paysAtleastValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
     pletFields @'["address", "value"] txOut $ \txoFields ->
-      txoFields.address #== adr #&& txoFields.value #<= val
+      txoFields.address #== adr #&& pvalueContains # val # txoFields.value
 
 paysToCredential :: Term s (PScriptHash :--> PTxOut :--> PBool)
 paysToCredential = phoistAcyclic $
@@ -682,14 +650,14 @@ pcountOfUniqueTokens = phoistAcyclic $
           pmatch val' $ \(PMap csPairs) -> pfoldl # plam (\acc x -> acc + (tokensLength # x)) # 0 # csPairs
 
 -- | Subtracts one Value from another
-(#-) ::
+psubtractValue ::
   forall
     (amounts :: AmountGuarantees)
     (s :: S).
   Term s (PValue 'Sorted amounts) ->
   Term s (PValue 'Sorted amounts) ->
   Term s (PValue 'Sorted 'NonZero)
-a #- b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMap.NonCommutative # plam (-) # a # b
+a `psubtractValue` b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMap.NonCommutative # plam (-) # a # b
 
 pfindWithRest ::
   forall (list :: PType -> PType) (a :: PType).
@@ -954,17 +922,9 @@ pand'List ts' =
     [] -> pconstant True
     ts -> foldl1 (\res x -> pand' # res # x) ts
 
-pcond ::  [(Term s PBool, Term s a)] -> Term s a -> Term s a
-pcond [] def                  = def
-pcond ((cond, x) : conds) def = pif cond x $ pcond conds def
-
-(#>) :: (POrd t) => Term s t -> Term s t -> Term s PBool
-a #> b = b #< a
-infix 4 #>
-
-(#>=) :: (POrd t) => Term s t -> Term s t -> Term s PBool
-a #>= b = b #<= a
-infix 4 #>=
+-- pcond ::  [(Term s PBool, Term s a)] -> Term s a -> Term s a
+-- pcond [] def                  = def
+-- pcond ((cond, x) : conds) def = pif cond x $ pcond conds def
 
 (#/=) :: (PEq t) => Term s t -> Term s t -> Term s PBool
 a #/= b = pnot # (a #== b)
@@ -1067,7 +1027,7 @@ punwrapPosixTime pt = pmatch (pfromData pt) $ \(PPosixTime pt') -> pmatch pt' $ 
 pwrapPosixTime :: Term s PInteger -> Term s (PAsData PPosixTime)
 pwrapPosixTime t = pdata $ pcon $ PPosixTime $ pcon $ PDataNewtype $ pdata t
 
-pdivCeil :: (PIntegral a, PNum a) => Term s (a :--> a :--> a)
+pdivCeil :: Term s (PInteger :--> PInteger :--> PInteger)
 pdivCeil = phoistAcyclic $
   plam $
     \x y -> 1 + pdiv # (x - 1) # y

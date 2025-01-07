@@ -9,31 +9,19 @@ module Plutarch.Core.List (
   emptyByteArray
 ) where
 
-import           Plutarch                    (ClosedTerm, Config (NoTracing),
-                                              PType, S, Term, perror, pfix,
-                                              phoistAcyclic, plam, plet, pto,
-                                              type (:-->), (#$), (#))
-import           Plutarch.Bitwise            (pcountSetBits, pwriteBits)
-import           Plutarch.Bool               (PBool, PEq ((#==)),
-                                              PPartialOrd ((#<), (#<=)), pif,
-                                              pnot)
-import           Plutarch.Builtin            (PAsData, PBuiltinList,
-                                              PBuiltinPair, pasConstr,
-                                              pforgetData, pfstBuiltin)
-import           Plutarch.ByteString         (PByteString, pconsBS, phexByteStr,
-                                              pindexBS)
+import           Plutarch.Prelude
+import           Plutarch.Builtin.Data
+import           Plutarch.Internal.IsData
+import           Plutarch.Builtin.ByteString (PByteString, pconsBS, phexByteStr)                                               
 import           Plutarch.Core.Utils         (pcond, ptails10, ptails20,
-                                              ptails30, (#>))
+                                              ptails30, (#>), pcountSetBits', pwriteBits', pindexBS')
 import           Plutarch.Evaluate           (unsafeEvalTerm)
-import           Plutarch.Integer            (PInteger, PIntegral (pmod))
+import           Plutarch.Builtin.Integer   (PInteger)
 import qualified Plutarch.LedgerApi.AssocMap as AssocMap
 import           Plutarch.LedgerApi.V3       (PRedeemer (..),
                                               PScriptPurpose (..))
-import           Plutarch.Lift               (pconstant)
-import           Plutarch.List               (PIsListLike,
-                                              PListLike (PElemConstraint, pcons, pelimList, phead, pnil, ptail))
+import           Plutarch.Internal.Term 
 import qualified Plutarch.Monadic            as P
-import           Plutarch.Num                ((#*))
 import           Prelude
 
 pdropR :: forall (list :: PType -> PType) (a :: PType) (s :: S).
@@ -78,13 +66,13 @@ pcheckIndex = phoistAcyclic $ plam $ \tagBits index -> P.do
 pow2_trick :: Term s (PInteger :--> PInteger)
 pow2_trick = plam $ \exponent' ->
   pcond
-    [ (exponent' #< 8, pindexBS # single_byte_powers # exponent')
-    , (exponent' #< 16, 256 #* pindexBS # single_byte_powers # (exponent' - 8))
-    , (exponent' #< 24, 65536 #* pindexBS # single_byte_powers # (exponent' - 16))
-    , (exponent' #< 32, 16777216 #* pindexBS # single_byte_powers # (exponent' - 24))
-    , (exponent' #< 40, 4294967296 #* pindexBS # single_byte_powers # (exponent' - 32))
-    , (exponent' #< 48, 1099511627776 #* pindexBS # single_byte_powers # (exponent' - 40))
-    , (exponent' #< 56, 281474976710656 #* pindexBS # single_byte_powers # (exponent' - 48))
+    [ (exponent' #< 8, pindexBS' # single_byte_powers # exponent')
+    , (exponent' #< 16, 256 #* pindexBS' # single_byte_powers # (exponent' - 8))
+    , (exponent' #< 24, 65536 #* pindexBS' # single_byte_powers # (exponent' - 16))
+    , (exponent' #< 32, 16777216 #* pindexBS' # single_byte_powers # (exponent' - 24))
+    , (exponent' #< 40, 4294967296 #* pindexBS' # single_byte_powers # (exponent' - 32))
+    , (exponent' #< 48, 1099511627776 #* pindexBS' # single_byte_powers # (exponent' - 40))
+    , (exponent' #< 56, 281474976710656 #* pindexBS' # single_byte_powers # (exponent' - 48))
     ]
     (281474976710656 #* ppow2 # (exponent' - 48))
 
@@ -93,7 +81,7 @@ ppow2 = phoistAcyclic $ pfix #$ plam $ \self e ->
   pif (e #< 8)
     (pif (e #< 0)
       0
-      (pindexBS # single_byte_powers # e)
+      (pindexBS' # single_byte_powers # e)
     )
     (pif (e #< 32)
       (256 #* self # (e - 8))
@@ -102,7 +90,7 @@ ppow2 = phoistAcyclic $ pfix #$ plam $ \self e ->
 
 phasNSetBits :: Term s PInteger -> Term s PByteString -> Term s PBool
 phasNSetBits n bs =
-  let setBits = pcountSetBits # bs
+  let setBits = pcountSetBits' # bs
    in setBits #== n
 
 -- exists to bench against pisUniqueSet
@@ -158,10 +146,10 @@ penforceNSpendRedeemers n rdmrs =
 
 pisUniqueSet :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
 pisUniqueSet = phoistAcyclic $ plam $ \n xs ->
-  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant True
-  in (pcountSetBits # flagUniqueBits #== (pbuiltinListLengthFast # n # xs))
+  let flagUniqueBits = pwriteBits' # emptyByteArray # xs # pconstant True
+  in (pcountSetBits' # flagUniqueBits #== (pbuiltinListLengthFast # n # xs))
 
 phasNUniqueElements :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
 phasNUniqueElements = phoistAcyclic $ plam $ \n xs ->
-  let flagUniqueBits = pwriteBits # emptyByteArray # xs # pconstant True
-  in (pcountSetBits # flagUniqueBits #== n)
+  let flagUniqueBits = pwriteBits' # emptyByteArray # xs # pconstant True
+  in (pcountSetBits' # flagUniqueBits #== n)

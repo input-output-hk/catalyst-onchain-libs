@@ -2,10 +2,8 @@ cabal-version: 3.4
 name:          plutarch-onchain-lib
 version:       0.3.0.0
 synopsis:      High-performance onchain-library for plutarch
-license: Apache-2.0
-license-files:
-  LICENSE
-
+license:       Apache-2.0
+license-files: LICENSE
 maintainer:    j-mueller@users.noreply.github.com
 author:        Djed team @ IOG
 homepage:      https://github.com/input-output-hk/catalyst-onchain-libs
@@ -16,67 +14,86 @@ description:
 build-type:    Simple
 
 common lang
-  default-language: Haskell2010
-  default-extensions: ExplicitForAll ScopedTypeVariables MultiParamTypeClasses
-                      DeriveGeneric StandaloneDeriving DeriveLift FlexibleContexts
-                      GeneralizedNewtypeDeriving DeriveFunctor DeriveFoldable
-                      DeriveTraversable ImportQualifiedPost NumericUnderscores
-                      LambdaCase DerivingStrategies KindSignatures TypeApplications
-                      DataKinds TypeOperators GADTs ViewPatterns TypeFamilies
-                      DeriveAnyClass DerivingVia RankNTypes
-  ghc-options: -Wall -Wnoncanonical-monad-instances -Wunused-packages
-                -Wincomplete-uni-patterns -Wincomplete-record-updates
-                -Wredundant-constraints -Widentities
+  default-language:   Haskell2010
+  default-extensions:
+    DataKinds
+    DeriveAnyClass
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveLift
+    DeriveTraversable
+    DerivingStrategies
+    DerivingVia
+    ExplicitForAll
+    FlexibleContexts
+    GADTs
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    NumericUnderscores
+    RankNTypes
+    ScopedTypeVariables
+    StandaloneDeriving
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    ViewPatterns
+
+  ghc-options:
+    -Wall -Wnoncanonical-monad-instances -Wunused-packages
+    -Wincomplete-uni-patterns -Wincomplete-record-updates
+    -Wredundant-constraints -Widentities
 
 library
-  import: lang
+  import:          lang
   exposed-modules:
-    Plutarch.Lib
     Plutarch.Core.Crypto
     Plutarch.Core.Eval
     Plutarch.Core.List
-    Plutarch.Core.PlutusDataList
     Plutarch.Core.Scripts
     Plutarch.Core.Utils
-    Plutarch.Extra.Record
-    Plutarch.MerkleTree.Helpers
-    Plutarch.MerkleTree.Merkling
-    Plutarch.MerkleTree.PatriciaForestry
-  hs-source-dirs: lib
+    Plutarch.Lib
+
+  -- Plutarch.Core.PlutusDataList
+  -- Plutarch.MerkleTree.Helpers
+  -- Plutarch.MerkleTree.Merkling
+  -- Plutarch.MerkleTree.PatriciaForestry
+  hs-source-dirs:  lib
   build-depends:
-    base >= 4.14 && < 4.20,
-    plutarch,
-    plutarch-ledger-api,
-    plutus-core,
-    bytestring,
-    generics-sop,
-    text,
-    plutus-tx,
-    plutus-ledger-api,
-    cardano-binary,
-    aeson,
-    base16-bytestring,
-    prettyprinter,
-    aeson-pretty,
-    tasty-hunit
+    , aeson
+    , aeson-pretty
+    , base                 >=4.14 && <4.20
+    , base16-bytestring
+    , bytestring
+    , cardano-binary
+    , generics-sop
+    , plutarch
+    , plutarch-ledger-api
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-tx
+    , prettyprinter
+    , tasty-hunit
+    , text
 
 test-suite plutarch-onchain-lib-tests
-  import:  lang
-  type:    exitcode-stdio-1.0
-  main-is: Test.hs
-  other-modules:
-    Plutarch.MerkleTree.Test
-  hs-source-dirs:
-    test
+  import:         lang
+  type:           exitcode-stdio-1.0
+  main-is:        Test.hs
+  other-modules:  Plutarch.MerkleTree.Test
+  hs-source-dirs: test
   build-depends:
-    base,
-    plutarch-onchain-lib,
-    tasty,
-    tasty-hunit,
-    tasty-quickcheck,
-    bytestring,
-    plutarch,
-    plutus-ledger-api,
-    cardano-crypto-class,
-    plutus-core,
-    quickcheck-instances
+    , base
+    , bytestring
+    , cardano-crypto-class
+    , plutarch              ==1.9.0
+    , plutarch-onchain-lib
+    , plutus-core
+    , plutus-ledger-api
+    , quickcheck-instances
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck

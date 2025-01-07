@@ -13,21 +13,27 @@ module Plutarch.Core.Crypto(
   scriptHashV3
 ) where
 
-import           Data.ByteString        (ByteString)
-import qualified Data.ByteString        as BS
-import           Data.ByteString.Short  (fromShort)
-import           Data.Word              (Word8)
-import           Plutarch               (Term, phoistAcyclic, plam, plet,
-                                         type (:-->), (#))
-import           Plutarch.Bool          (pif, (#==))
-import           Plutarch.ByteString    (PByteString, pindexBS, plengthBS,
-                                         psliceBS)
-import           Plutarch.Crypto        (pblake2b_224, pkeccak_256)
-import           Plutarch.Integer       (PInteger, pmod)
-import           Plutarch.Lift          (pconstant)
-import           Plutarch.Script        (Script (unScript))
-import qualified PlutusCore.Crypto.Hash as Hash
-import           PlutusLedgerApi.Common (serialiseUPLC)
+import           Data.ByteString         (ByteString)
+import qualified Data.ByteString         as BS
+import           Data.ByteString.Short   (fromShort)
+import           Data.Word               (Word8)
+import           Plutarch.Builtin.Bool           (pif)
+import Plutarch.Internal.Eq ((#==))
+import           Plutarch.Builtin.ByteString     (PByteString, plengthBS,
+                                                 psliceBS)
+import           Plutarch.Builtin.Crypto (pblake2b_224, pkeccak_256)
+import           Plutarch.Builtin.Integer        (PInteger)
+import Plutarch.Internal.Lift (pconstant)
+import           Plutarch.Script         (Script (unScript))
+import qualified PlutusCore.Crypto.Hash  as Hash
+import           PlutusLedgerApi.Common  (serialiseUPLC)
+import Plutarch.Internal.Numeric (pmod)
+import Plutarch.Internal.Term (punsafeBuiltin)
+import Plutarch.Prelude
+import PlutusCore qualified as PLC
+
+pindexBS' :: Term s (PByteString :--> PInteger :--> PInteger)
+pindexBS' = punsafeBuiltin PLC.IndexByteString
 
 scriptHashV3 :: Script -> ByteString
 scriptHashV3 = hashScriptWithPrefix 0x3
@@ -54,7 +60,7 @@ pcompressPublicKey pubKey =
       (pconstant "\x03" <> xCoordinate)
   where
     yCoordinate = pdropBS # 32 # pubKey
-    peven bs = (pmod # (pindexBS # bs # 31) # 2) #== 0
+    peven bs = (pmod # (pindexBS' # bs # 31) # 2) #== 0
 
 ptakeBS :: Term s (PInteger :--> PByteString :--> PByteString)
 ptakeBS = phoistAcyclic $ plam $ \n bs ->
