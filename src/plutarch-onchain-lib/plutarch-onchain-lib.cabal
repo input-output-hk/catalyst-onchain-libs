@@ -56,11 +56,10 @@ library
     Plutarch.Core.Scripts
     Plutarch.Core.Utils
     Plutarch.Lib
+    Plutarch.MerkleTree.Helpers
+    Plutarch.MerkleTree.Merkling
+    Plutarch.MerkleTree.PatriciaForestry
 
-  -- Plutarch.Core.PlutusDataList
-  -- Plutarch.MerkleTree.Helpers
-  -- Plutarch.MerkleTree.Merkling
-  -- Plutarch.MerkleTree.PatriciaForestry
   hs-source-dirs:  lib
   build-depends:
     , aeson
@@ -90,7 +89,29 @@ test-suite plutarch-onchain-lib-tests
     , bytestring
     , cardano-crypto-class
     , plutarch              ==1.9.0
+    , plutarch-ledger-api
     , plutarch-onchain-lib
+    , plutarch-testlib
+    , plutus-core
+    , plutus-ledger-api
+    , quickcheck-instances
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+
+test-suite plutarch-onchain-lib-bench
+  import:         lang
+  type:           exitcode-stdio-1.0
+  main-is:        Bench.hs
+  hs-source-dirs: test
+  build-depends:
+    , base
+    , bytestring
+    , cardano-crypto-class
+    , plutarch              ==1.9.0
+    , plutarch-ledger-api
+    , plutarch-onchain-lib
+    , plutarch-testlib
     , plutus-core
     , plutus-ledger-api
     , quickcheck-instances

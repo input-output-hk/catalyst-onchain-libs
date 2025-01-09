@@ -13,6 +13,7 @@ Copyright   : (c) Philip DiSarro, 2024
 Stability   : experimental
 
 -}
+
 module Plutarch.Core.Utils(
   pfail,
   pdebug,
@@ -112,7 +113,8 @@ module Plutarch.Core.Utils(
   psubtractValue,
   pcountSetBits',
   pwriteBits',
-  pindexBS'
+  pindexBS',
+  pconsBS'
 ) where
 
 import           Data.List                        (foldl')
@@ -142,6 +144,9 @@ pwriteBits' = punsafeBuiltin PLC.WriteBits
 
 pindexBS' :: Term s (PByteString :--> PInteger :--> PInteger)
 pindexBS' = punsafeBuiltin PLC.IndexByteString
+
+pconsBS' :: Term s (PInteger :--> PByteString :--> PByteString)
+pconsBS' = punsafeBuiltin PLC.ConsByteString
 
 pfail ::
   forall (s :: S) a.

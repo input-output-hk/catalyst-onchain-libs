@@ -20,7 +20,7 @@ module Plutarch.MerkleTree.Merkling(
 ) where
 
 import qualified Data.ByteString             as BS
-import           Plutarch.Core.Utils         ((#>=))
+import           Plutarch.Core.Utils         
 import           Plutarch.MerkleTree.Helpers (pcombine)
 import           Plutarch.Prelude
 

@@ -1,10 +1,12 @@
 {-# LANGUAGE QualifiedDo #-}
 module Plutarch.Core.List (
   pdropFast,
+  pdropR,
   pbuiltinListLengthFast,
   penforceNSpendRedeemers,
   phasNSetBits,
   pisUniqueSet,
+  _pIsUnique,
   phasNUniqueElements,
   emptyByteArray
 ) where
@@ -13,10 +15,9 @@ import           Plutarch.Prelude
 import           Plutarch.Builtin.Data
 import           Plutarch.Internal.IsData
 import           Plutarch.Builtin.ByteString (PByteString, pconsBS, phexByteStr)                                               
-import           Plutarch.Core.Utils         (pcond, ptails10, ptails20,
-                                              ptails30, (#>), pcountSetBits', pwriteBits', pindexBS')
+import           Plutarch.Core.Utils         (ptails10, ptails20,
+                                              ptails30, pcountSetBits', pwriteBits', pindexBS')
 import           Plutarch.Evaluate           (unsafeEvalTerm)
-import           Plutarch.Builtin.Integer   (PInteger)
 import qualified Plutarch.LedgerApi.AssocMap as AssocMap
 import           Plutarch.LedgerApi.V3       (PRedeemer (..),
                                               PScriptPurpose (..))

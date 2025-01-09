@@ -16,8 +16,3 @@ tryCompileTracingAndBinds = tryCompile (Tracing LogInfo DoTracingAndBinds)
 
 tryCompileNoTracing :: ClosedTerm a -> Script
 tryCompileNoTracing = tryCompile NoTracing
-
-
-
-
-
