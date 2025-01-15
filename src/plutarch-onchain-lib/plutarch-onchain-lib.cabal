@@ -51,10 +51,17 @@ library
   import:          lang
   exposed-modules:
     Plutarch.Core.Crypto
+    Plutarch.Core.Data
     Plutarch.Core.Eval
+    Plutarch.Core.FieldBinds
+    Plutarch.Core.Internal.Builtins
     Plutarch.Core.List
+    Plutarch.Core.PByteString
     Plutarch.Core.Scripts
+    Plutarch.Core.Time
     Plutarch.Core.Utils
+    Plutarch.Core.ValidationLogic
+    Plutarch.Core.Value
     Plutarch.Lib
     Plutarch.MerkleTree.Helpers
     Plutarch.MerkleTree.Merkling
@@ -114,6 +121,7 @@ test-suite plutarch-onchain-lib-bench
     , plutarch-testlib
     , plutus-core
     , plutus-ledger-api
+    , plutus-tx
     , quickcheck-instances
     , tasty
     , tasty-hunit

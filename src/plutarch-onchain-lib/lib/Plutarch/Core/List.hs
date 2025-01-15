@@ -1,29 +1,59 @@
 {-# LANGUAGE QualifiedDo #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 module Plutarch.Core.List (
   pdropFast,
   pdropR,
   pbuiltinListLengthFast,
-  penforceNSpendRedeemers,
   phasNSetBits,
   pisUniqueSet,
   _pIsUnique,
   phasNUniqueElements,
-  emptyByteArray
+  emptyByteArray,
+  pelemAt',
+  pelemAtFlipped',
+  pelemAtFast
 ) where
 
 import           Plutarch.Prelude
-import           Plutarch.Builtin.Data
-import           Plutarch.Internal.IsData
-import           Plutarch.Builtin.ByteString (PByteString, pconsBS, phexByteStr)                                               
 import           Plutarch.Core.Utils         (ptails10, ptails20,
-                                              ptails30, pcountSetBits', pwriteBits', pindexBS')
+                                              ptails30)
+import           Plutarch.Core.Internal.Builtins       (pcountSetBits', pwriteBits', pindexBS')                                            
 import           Plutarch.Evaluate           (unsafeEvalTerm)
-import qualified Plutarch.LedgerApi.AssocMap as AssocMap
-import           Plutarch.LedgerApi.V3       (PRedeemer (..),
-                                              PScriptPurpose (..))
 import           Plutarch.Internal.Term 
 import qualified Plutarch.Monadic            as P
 import           Prelude
+
+pelemAt' :: PIsListLike l a => Term s (PInteger :--> l a :--> a)
+pelemAt' = phoistAcyclic $
+  pfix #$ plam $ \self n xs ->
+    pif
+      (n #== 0)
+      (phead # xs)
+      (self # (n - 1) #$ ptail # xs)
+
+pelemAtFlipped' :: PIsListLike l a => Term s (l a :--> PInteger :--> a)
+pelemAtFlipped' = phoistAcyclic $
+  pfix #$ plam $ \self xs n ->
+    pif
+      (n #== 0)
+      (phead # xs)
+      (self # (ptail # xs) # (n - 1))
+
+pelemAtFast :: (PIsListLike list a) => Term s (list a :--> PInteger :--> a)
+pelemAtFast = phoistAcyclic $
+  pfix #$ plam $ \self xs n ->
+    pif
+      (10 #< n)
+      ( self
+          # ( ptails10 # xs )
+          # (n - 10)
+      )
+      ( pif
+          (5 #< n)
+          (self # (ptail #$ ptail #$ ptail #$ ptail #$ ptail # xs) # (n - 5))
+          (pelemAtFlipped' # xs # n)
+      )
 
 pdropR :: forall (list :: PType -> PType) (a :: PType) (s :: S).
           PIsListLike list a =>
@@ -128,22 +158,6 @@ pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
                ]
                (pbuiltinListLength 0 # xs)
    in go # n # 0 # elems
-
-penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PBool
-penforceNSpendRedeemers n rdmrs =
-    let isNonSpend :: Term (w :: S) (PAsData PScriptPurpose) -> Term (w :: S) PBool
-        isNonSpend red = pnot # (pfstBuiltin # (pasConstr # pforgetData red) #== 1)
-
-        isLastSpend :: Term (s :: S) (PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PBool)
-        isLastSpend = plam $ \redeemers ->
-          let constrPair :: Term s (PAsData PScriptPurpose)
-              constrPair = pfstBuiltin # (phead # redeemers)
-              constrIdx = pfstBuiltin # (pasConstr # pforgetData constrPair)
-           in pif
-                (constrIdx #== 1)
-                (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
-                perror
-     in isLastSpend # (pdropFast # (n - 1) # pto rdmrs)
 
 pisUniqueSet :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
 pisUniqueSet = phoistAcyclic $ plam $ \n xs ->

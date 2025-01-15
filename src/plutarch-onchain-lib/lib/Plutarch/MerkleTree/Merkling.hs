@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 {-|
 Module      : Plutarch.MerkleTree.Merkling
 Description : Functions for combining merkle tree nodes

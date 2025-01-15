@@ -13,7 +13,7 @@ module Plutarch.MerkleTree.Helpers(
 ) where
 
 import qualified Data.ByteString     as BS
-import           Plutarch.Core.Utils (pindexBS', pconsBS')
+import           Plutarch.Core.Internal.Builtins (pindexBS', pconsBS')
 import           Plutarch.Builtin.Crypto     (pblake2b_256)
 import           Plutarch.Prelude
 

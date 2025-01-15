@@ -8,6 +8,8 @@
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 {-|
 Module      : Plutarch.MerkleTree.PatriciaForestry
 Description : Merkle trees in Plutarch
@@ -43,14 +45,14 @@ module Plutarch.MerkleTree.PatriciaForestry(
 import           Plutarch.Builtin.Crypto      (pblake2b_256)
 import           Plutarch.DataRepr
 import           Plutarch.Internal.Lift
-import           Plutarch.Core.Utils          (pconsBS')
+import           Plutarch.Core.Internal.Builtins          (pconsBS')
 import           Plutarch.MerkleTree.Helpers  (pcombine, pnibble, pnibbles,
                                                psuffix)
 import           Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash,
                                                psparse_merkle_16)
 import           Plutarch.Prelude
 import PlutusTx.Builtins.Internal (BuiltinByteString (BuiltinByteString))
-import           PlutusLedgerApi.V2           (BuiltinByteString)
+--import           PlutusLedgerApi.V2           (BuiltinByteString)
 import           GHC.Generics (Generic)
 import qualified PlutusTx
 

@@ -18,14 +18,6 @@ module Plutarch.Core.Utils(
   pfail,
   pdebug,
   PTxOutH(..),
-  PPosixTimeRange,
-  PCustomFiniteRange (..),
-  PPosixFiniteRange(..),
-  PMintingScriptHRec,
-  pletFieldsMinting,
-  ptoFiniteRange,
-  pletFieldsSpending,
-  pletFieldsRewarding,
   pisRewarding,
   pcountSpendRedeemers,
   ptryFromInlineDatum,
@@ -35,26 +27,17 @@ module Plutarch.Core.Utils(
   ppair,
   passert,
   pcheck,
-  pfindCurrencySymbolsByTokenPrefix,
   pcountScriptInputs,
   pfoldl2,
   pelemAtWithRest',
   pmapIdxs,
-  pfindCurrencySymbolsByTokenName,
   pmapFilter,
-  phasDataCS,
-  phasCS,
-  pcontainsCurrencySymbols,
-  pisPrefixedWith,
   tcexpectJust,
   paysToAddress,
   paysValueToAddress,
   paysAtleastValueToAddress,
   paysToCredential,
   pgetPubKeyHash,
-  pelemAt',
-  pelemAtFlipped',
-  pelemAtFast,
   pmapMaybe,
   paysToPubKey,
   ptryOutputToAddress,
@@ -65,7 +48,6 @@ module Plutarch.Core.Utils(
   pheadSingleton,
   pisSingleton,
   ptxSignedByPkh,
-  pcountOfUniqueTokens,
   (#-),
   pfindWithRest,
   pcountCS,
@@ -88,10 +70,6 @@ module Plutarch.Core.Utils(
   pisFinite,
   pmapAndConvertList,
   pintToByteString,
-  pvalidityRangeStart,
-  pvalidityRangeEnd,
-  ptoCustomFiniteRange,
-  ptoCustomFiniteRangeH,
   punwrapPosixTime,
   pwrapPosixTime,
   pdivCeil,
@@ -104,49 +82,46 @@ module Plutarch.Core.Utils(
   pmkBuiltinList,
   ponlyLovelaceValueOf,
   plovelaceValueOf,
-  pvalueSingleton,
-  pmapData,
-  ppairDataBuiltinRaw,
   pvalidateConditions,
-  pisPrefixOf,
   pcountInputsFromCred,
-  psubtractValue,
-  pcountSetBits',
-  pwriteBits',
-  pindexBS',
-  pconsBS'
+
 ) where
 
 import           Data.List                        (foldl')
 import qualified Data.Text                        as T
 import           Plutarch.Prelude                 
 
-import           Plutarch.DataRepr.Internal.Field 
 import qualified Plutarch.LedgerApi.AssocMap      as AssocMap
-import           Plutarch.LedgerApi.V3            
-import           Plutarch.LedgerApi.Value         (padaSymbol, pnormalize,
+import Plutarch.LedgerApi.V3
+    ( KeyGuarantees(Sorted),
+      PMap(..),
+      PExtended(PFinite),
+      PInterval,
+      PMaybeData,
+      PAddress,
+      PCredential(..),
+      PPubKeyHash,
+      PDatum,
+      PRedeemer,
+      PScriptHash,
+      PPosixTime(..),
+      POutputDatum(POutputDatum),
+      PTxOut,
+      PScriptInfo,
+      PScriptPurpose,
+      PTxInInfo,
+      PTxOutRef,
+      AmountGuarantees(Positive),
+      PCurrencySymbol,
+      PTokenName,
+      PValue(..) )            
+import           Plutarch.LedgerApi.Value         (padaSymbol,
                                                    pvalueOf)
-import qualified Plutarch.LedgerApi.Value         as Value
 import qualified Plutarch.Monadic                 as P
-import           Plutarch.Prelude                 
                                          
-import qualified PlutusCore                       as PLC
 import           Prelude
-import           Plutarch.Internal.Numeric
-import           Plutarch.Internal.Term 
+import           Plutarch.Internal.Term ( PType ) 
 import           GHC.Generics (Generic)
-
-pcountSetBits' :: Term s (PByteString :--> PInteger)
-pcountSetBits' = punsafeBuiltin PLC.CountSetBits
-
-pwriteBits' :: forall (s :: S). Term s (PByteString :--> PBuiltinList PInteger :--> PBool :--> PByteString)
-pwriteBits' = punsafeBuiltin PLC.WriteBits
-
-pindexBS' :: Term s (PByteString :--> PInteger :--> PInteger)
-pindexBS' = punsafeBuiltin PLC.IndexByteString
-
-pconsBS' :: Term s (PInteger :--> PByteString :--> PByteString)
-pconsBS' = punsafeBuiltin PLC.ConsByteString
 
 pfail ::
   forall (s :: S) a.
@@ -180,72 +155,6 @@ data PTxOutH (s :: S) =
     , ptxOutDatum           :: Term s POutputDatum
     , ptxOutReferenceScript :: Term s (PMaybeData PScriptHash)
     }
-
-type PPosixTimeRange = PInterval PPosixTime
-
-data PPosixFiniteRange (s :: S) = PPosixFiniteRange
-  { from :: Term s PPosixTime
-  , to   :: Term s PPosixTime
-  }
-  deriving stock (Generic)
-  deriving anyclass
-    ( PlutusType
-    )
-
-instance DerivePlutusType PPosixFiniteRange where
-  type DPTStrat _ = PlutusTypeScott
-
-ptoFiniteRange :: Term s (PPosixTimeRange :--> PPosixFiniteRange)
-ptoFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
-  timeRangeF <- pletFields @'["from", "to"] timeRange
-  PLowerBound lb <- pmatch timeRangeF.from
-  PFinite ((pfield @"_0" #) -> start) <- pmatch (pfield @"_0" # lb)
-  PUpperBound ub <- pmatch timeRangeF.to
-  PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
-  pcon $ PPosixFiniteRange { from = start, to = end }
-
-type PMintingScriptHRec (s :: S) =
-  HRec
-    '[ '("_0", Term s (PAsData PCurrencySymbol))
-     ]
-
-pletFieldsMinting :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PMintingScriptHRec s -> Term s r) -> Term s r
-pletFieldsMinting term = runTermCont $ do
-  constrPair <- tcont $ plet $ pasConstr # pforgetData term
-  fields <- tcont $ plet $ psndBuiltin # constrPair
-  checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 0) fields perror
-  let mintCS = punsafeCoerce @(PAsData PCurrencySymbol) $ phead # checkedFields
-  tcont $ \f -> f $ HCons (Labeled @"_0" mintCS) HNil
-
-type PScriptInfoHRec (s :: S) =
-  HRec
-    '[ '("_0", Term s (PAsData PTxOutRef))
-     , '("_1", Term s (PAsData (PMaybeData PDatum)))
-     ]
-
--- Example usage:
---
--- @
--- pletFieldsSpending spendingScriptTerm $ \scriptInfoHRec ->
---   punsafeCoerce @_ @_ @PSignedObservation (pto scriptInfoHRec._1)
--- @
-pletFieldsSpending :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PScriptInfoHRec s -> Term s r) -> Term s r
-pletFieldsSpending term = runTermCont $ do
-  constrPair <- tcont $ plet $ pasConstr # pforgetData term
-  fields <- tcont $ plet $ psndBuiltin # constrPair
-  checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 1) fields perror
-  let outRef = punsafeCoerce @(PAsData PTxOutRef) $ phead # checkedFields
-      datum = punsafeCoerce @(PAsData (PMaybeData PDatum)) $ phead # (ptail # checkedFields)
-  tcont $ \f -> f $ HCons (Labeled @"_0" outRef) (HCons (Labeled @"_1" datum) HNil)
-
-pletFieldsRewarding :: forall {s :: S} {r :: PType}. Term s (PAsData PScriptInfo) -> (PScriptInfoHRec s -> Term s r) -> Term s r
-pletFieldsRewarding term = runTermCont $ do
-  constrPair <- tcont $ plet $ pasConstr # pforgetData term
-  fields <- tcont $ plet $ psndBuiltin # constrPair
-  checkedFields <- tcont $ plet $ pif ((pfstBuiltin # constrPair) #== 2) fields perror
-  let outRef = punsafeCoerce @(PAsData PTxOutRef) $ phead # checkedFields
-      datum = punsafeCoerce @(PAsData (PMaybeData PDatum)) $ phead # (ptail # checkedFields)
-  tcont $ \f -> f $ HCons (Labeled @"_0" outRef) (HCons (Labeled @"_1" datum) HNil)
 
 pisRewarding :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisRewarding term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
@@ -329,30 +238,6 @@ passert longErrorMsg b inp = pif b inp $ ptraceInfoError (pconstant longErrorMsg
 pcheck :: forall (s :: S) (a :: PType). Term s PBool -> Term s a -> Term s (PMaybe a)
 pcheck b inp = pif b (pcon $ PJust inp) (pcon PNothing)
 
-{- | Finds the associated Currency symbols that contain token
-  names prefixed with the ByteString.
--}
-pfindCurrencySymbolsByTokenPrefix ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
-        :--> PByteString
-        :--> PBuiltinList (PAsData PCurrencySymbol)
-    )
-pfindCurrencySymbolsByTokenPrefix = phoistAcyclic $
-  plam $ \value prefix ->
-    plet (pisPrefixOf # prefix) $ \prefixCheck ->
-      let mapVal = pto (pto value)
-          isPrefixed = pfilter # plam (\csPair ->
-            pany # plam (\tkPair ->
-              pmatch (pto (pfromData $ pfstBuiltin # tkPair)) $ \(PDataNewtype tkn) ->
-                  prefixCheck # pfromData tkn
-              ) # pto (pfromData (psndBuiltin # csPair))
-            ) # mapVal
-       in pmap # pfstBuiltin # isPrefixed
-
 pcountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
 pcountScriptInputs =
   phoistAcyclic $
@@ -406,24 +291,6 @@ pmapIdxs =
         pnil
         la
 
-{- | Finds the associated Currency symbols that contain the given token
-  name.
--}
-pfindCurrencySymbolsByTokenName ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
-        :--> PTokenName
-        :--> PBuiltinList (PAsData PCurrencySymbol)
-    )
-pfindCurrencySymbolsByTokenName = phoistAcyclic $
-  plam $ \value tn ->
-      let mapVal = pto (pto value)
-          hasTn = pfilter # plam (\csPair -> pany # plam (\tk -> tn #== pfromData (pfstBuiltin # tk)) # pto (pfromData (psndBuiltin # csPair))) # mapVal
-       in pmap # pfstBuiltin # hasTn
-
 pmapFilter ::
   (PIsListLike list a, PElemConstraint list b) => Term s ((b :--> PBool) :--> (a :--> b) :-->  list a :--> list b)
 pmapFilter =
@@ -437,55 +304,6 @@ pmapFilter =
               (self # xs)
         )
         (const pnil)
-
--- | Checks if a Currency Symbol is held within a Value
-phasDataCS ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    (PAsData PCurrencySymbol :--> PValue anyOrder anyAmount :--> PBool)
-phasDataCS = phoistAcyclic $
-  plam $ \symbol value ->
-    pany # plam (\tkPair -> (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
-
-phasCS ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    (PValue anyOrder anyAmount :--> PCurrencySymbol :--> PBool)
-phasCS = phoistAcyclic $
-  plam $ \value symbol ->
-    pany # plam (\tkPair -> pfromData (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
-
--- | Checks that a Value contains all the given CurrencySymbols.
-pcontainsCurrencySymbols ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
-        :--> PBuiltinList (PAsData PCurrencySymbol)
-        :--> PBool
-    )
-pcontainsCurrencySymbols = phoistAcyclic $
-  plam $ \inValue symbols ->
-    let value = pmap # pfstBuiltin #$ pto $ pto inValue
-        containsCS = plam $ \cs -> pelem # cs # value
-     in pall # containsCS # symbols
-
--- | Checks if a tokenName is prefixed by a certain ByteString
-pisPrefixedWith :: ClosedTerm (PTokenName :--> PByteString :--> PBool)
-pisPrefixedWith = plam $ \tn prefix ->
-  pmatch (pto tn) $ \(PDataNewtype tnBS) -> pisPrefixOf # prefix # pfromData tnBS
-
--- | Checks if the first ByteString is a prefix of the second
-pisPrefixOf :: ClosedTerm (PByteString :--> PByteString :--> PBool)
-pisPrefixOf = plam $ \prefix src ->
-  let prefixLength = plengthBS # prefix
-      prefix' = psliceBS # 0 # prefixLength # src
-   in prefix' #== prefix
 
 tcexpectJust :: forall r (a :: PType) (s :: S). Term s r -> Term s (PMaybe a) -> TermCont @r s (Term s a)
 tcexpectJust escape ma = tcont $ \f -> pmatch ma $ \case
@@ -524,37 +342,6 @@ pgetPubKeyHash addr =
    in pmatch cred $ \case
         PScriptCredential _ -> perror
         PPubKeyCredential pkh' -> pfield @"_0" # pkh'
-
-pelemAt' :: PIsListLike l a => Term s (PInteger :--> l a :--> a)
-pelemAt' = phoistAcyclic $
-  pfix #$ plam $ \self n xs ->
-    pif
-      (n #== 0)
-      (phead # xs)
-      (self # (n - 1) #$ ptail # xs)
-
-pelemAtFlipped' :: PIsListLike l a => Term s (l a :--> PInteger :--> a)
-pelemAtFlipped' = phoistAcyclic $
-  pfix #$ plam $ \self xs n ->
-    pif
-      (n #== 0)
-      (phead # xs)
-      (self # (ptail # xs) # (n - 1))
-
-pelemAtFast :: (PIsListLike list a) => Term s (list a :--> PInteger :--> a)
-pelemAtFast = phoistAcyclic $
-  pfix #$ plam $ \self xs n ->
-    pif
-      (10 #< n)
-      ( self
-          # ( ptails10 # xs )
-          # (n - 10)
-      )
-      ( pif
-          (5 #< n)
-          (self # (ptail #$ ptail #$ ptail #$ ptail #$ ptail # xs) # (n - 5))
-          (pelemAtFlipped' # xs # n)
-      )
 
 pmapMaybe ::
   forall (list :: PType -> PType) (a :: PType) (b :: PType).
@@ -640,29 +427,6 @@ pisSingleton = pelimList
 ptxSignedByPkh ::
   Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
 ptxSignedByPkh = pelem
-
--- | Probably more effective than `plength . pflattenValue`
-pcountOfUniqueTokens ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PInteger)
-pcountOfUniqueTokens = phoistAcyclic $
-  plam $ \val ->
-    let tokensLength = plam (\pair -> pmatch (pfromData $ psndBuiltin # pair) $ \(PMap tokens) -> plength # tokens)
-     in pmatch val $ \(PValue val') ->
-          pmatch val' $ \(PMap csPairs) -> pfoldl # plam (\acc x -> acc + (tokensLength # x)) # 0 # csPairs
-
--- | Subtracts one Value from another
-psubtractValue ::
-  forall
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue 'Sorted amounts) ->
-  Term s (PValue 'Sorted amounts) ->
-  Term s (PValue 'Sorted 'NonZero)
-a `psubtractValue` b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMap.NonCommutative # plam (-) # a # b
 
 pfindWithRest ::
   forall (list :: PType -> PType) (a :: PType).
@@ -982,50 +746,6 @@ pshowDigit = phoistAcyclic $
       ]
       perror
 
-pvalidityRangeStart :: Term s (PPosixTimeRange :--> PAsData PInteger)
-pvalidityRangeStart = phoistAcyclic $ plam $ \timeRange -> P.do
-  PInterval ((pfield @"from" #) -> startTime) <- pmatch timeRange
-  PLowerBound lb <- pmatch startTime
-  PFinite ((pfield @"_0" #) -> posixTime) <- pmatch (pfield @"_0" # lb)
-  pmatch posixTime $ \(PPosixTime pt) -> pmatch pt $ \(PDataNewtype t) -> t
-
-pvalidityRangeEnd :: Term s (PPosixTimeRange :--> PAsData PInteger)
-pvalidityRangeEnd = phoistAcyclic $ plam $ \timeRange -> P.do
-  PInterval ((pfield @"to" #) -> to_) <- pmatch timeRange
-  PUpperBound ub <- pmatch to_
-  PFinite ((pfield @"_0" #) -> posixTime) <- pmatch (pfield @"_0" # ub)
-  pmatch posixTime $ \(PPosixTime pt) -> pmatch pt $ \(PDataNewtype t) -> t
-
-data PCustomFiniteRange (s :: S) = PCustomFiniteRange
-  { from' :: Term s PPosixTime
-  , to'   :: Term s PPosixTime
-  }
-  deriving stock (Generic)
-  deriving anyclass
-    ( PlutusType
-    )
-
-instance DerivePlutusType PCustomFiniteRange where
-  type DPTStrat _ = PlutusTypeScott
-
-ptoCustomFiniteRange :: Term s (PPosixTimeRange :--> PCustomFiniteRange)
-ptoCustomFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
-  timeRangeF <- pletFields @'["from", "to"] timeRange
-  PLowerBound lb <- pmatch timeRangeF.from
-  PFinite ((pfield @"_0" #) -> start) <- pmatch (pfield @"_0" # lb)
-  PUpperBound ub <- pmatch timeRangeF.to
-  PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
-  pcon $ PCustomFiniteRange { from' = start, to' = end }
-
-ptoCustomFiniteRangeH :: Term s PPosixTimeRange -> TermCont @r s (Term s PInteger, Term s PInteger)
-ptoCustomFiniteRangeH timeRange = do
-  timeRangeF <- pletFieldsC @'["from", "to"] timeRange
-  PLowerBound lb <- pmatchC timeRangeF.from
-  PFinite ((pfield @"_0" #) -> start) <- pmatchC (pfield @"_0" # lb)
-  PUpperBound ub <- pmatchC timeRangeF.to
-  PFinite ((pfield @"_0" #) -> end) <- pmatchC (pfield @"_0" # ub)
-  pure (pnonew $ pfromData start, pnonew $ pfromData end)
-
 punwrapPosixTime :: Term s (PAsData PPosixTime) -> Term s PInteger
 punwrapPosixTime pt = pmatch (pfromData pt) $ \(PPosixTime pt') -> pmatch pt' $ \(PDataNewtype t) -> pfromData t
 
@@ -1083,26 +803,6 @@ plovelaceValueOf val =
   let csPairs = pto $ pto val
       adaEntry = phead # csPairs
   in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
-
-
--- | Constructs a singleton `PValue` with the given currency symbol, token name, and amount.
---
--- @param currencySymbol The currency symbol of the token.
--- @param tokenName The name of the token.
--- @param amount The amount of the token.
---
--- @return A singleton `PValue` containing the specified currency symbol, token name, and amount.
-pvalueSingleton :: Term s (PAsData PCurrencySymbol) -> Term s (PAsData PTokenName) -> Term s (PAsData PInteger) -> Term s (PAsData (PValue 'Sorted 'Positive))
-pvalueSingleton currencySymbol tokenName amount =
-  let innerValue = pcons @PBuiltinList # (ppairDataBuiltin # tokenName # amount) # pnil
-  in punsafeCoerce $ pmapData # (pcons @PBuiltinList # (ppairDataBuiltinRaw # pforgetData currencySymbol #$ pmapData # punsafeCoerce innerValue) # pnil)
-
--- Convert a BuiltinList of BuiltinPairs to a BuiltinMap
-pmapData :: Term s (PBuiltinList (PBuiltinPair PData PData) :--> PData)
-pmapData = punsafeBuiltin PLC.MapData
-
-ppairDataBuiltinRaw :: Term s (PData :--> PData :--> PBuiltinPair PData PData)
-ppairDataBuiltinRaw = punsafeBuiltin PLC.MkPairData
 
 -- | Strictly evaluates a list of boolean expressions.
 -- If all the expressions evaluate to true, returns unit, otherwise throws an error.
