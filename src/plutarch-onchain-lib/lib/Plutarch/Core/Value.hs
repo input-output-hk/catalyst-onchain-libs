@@ -18,8 +18,10 @@ import Plutarch.Core.PByteString(pisPrefixOf)
 import Plutarch.LedgerApi.Value
 import qualified Plutarch.LedgerApi.Value as Value
 import qualified Plutarch.LedgerApi.AssocMap as AssocMap
-import Plutarch.Internal.Term (punsafeCoerce)
+import Plutarch.Internal.Term (punsafeCoerce, PType)
 import Plutarch.Core.Internal.Builtins ( pmapData, ppairDataBuiltinRaw )
+import Plutarch.Core.List (pheadSingleton)
+import GHC.Generics (Generic)
 
 {- | Finds the associated Currency symbols that contain token names prefixed with the ByteString.
 -}
@@ -133,3 +135,150 @@ pvalueSingleton :: Term s (PAsData PCurrencySymbol) -> Term s (PAsData PTokenNam
 pvalueSingleton currencySymbol tokenName amount =
   let innerValue = pcons @PBuiltinList # (ppairDataBuiltin # tokenName # amount) # pnil
   in punsafeCoerce $ pmapData # (pcons @PBuiltinList # (ppairDataBuiltinRaw # pforgetData currencySymbol #$ pmapData # punsafeCoerce innerValue) # pnil)
+
+-- Returns the amount of Ada contained in a Value
+-- Errors if the Value contains tokens other than Ada
+--
+-- This function assumes that the first entry in the Value is Ada
+-- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
+-- So we are guaranteed that this is safe to use for any Value inside the Script Context
+ponlyLovelaceValueOf :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
+ponlyLovelaceValueOf val =
+  let csPairs = pto $ pto val
+      adaEntry = pheadSingleton # csPairs
+  in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
+
+-- | Returns the amount of Ada contained in a Value
+--
+-- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
+-- So we are guaranteed that this is safe to use for any Value inside the Script Context
+plovelaceValueOf :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
+plovelaceValueOf val =
+  let csPairs = pto $ pto val
+      adaEntry = phead # csPairs
+  in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
+
+data PTriple (a :: PType) (b :: PType) (c :: PType) (s :: S)
+  = PTriple (Term s a) (Term s b) (Term s c)
+  deriving stock (Generic)
+  deriving anyclass (PlutusType, PEq, PShow)
+
+instance DerivePlutusType (PTriple a b c) where type DPTStrat _ = PlutusTypeScott
+
+{- | Extract the token name and the amount of the given currency symbol.
+Throws when the token name is not found or more than one token name is involved
+Plutarch level function.
+-}
+ponlyAsset ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term s (PValue keys amounts :--> PTriple PCurrencySymbol PTokenName PInteger)
+ponlyAsset = phoistAcyclic $
+  plam $ \val ->
+    pmatch val $ \(PValue val') ->
+      plet (pheadSingleton # pto val') $ \valuePair ->
+        pmatch (pfromData (psndBuiltin # valuePair)) $ \(PMap tokens) ->
+          plet (pheadSingleton # tokens) $ \tkPair ->
+            pcon (PTriple (pfromData (pfstBuiltin # valuePair)) (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
+
+pvalueOfOneScott ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term
+    s
+    ( PCurrencySymbol
+        :--> PValue keys amounts
+        :--> PBool
+    )
+pvalueOfOneScott = phoistAcyclic $
+  plam $ \policyId val ->
+    pmatch val $ \(PValue val') ->
+      precList
+        ( \self x xs ->
+            pif
+              (pfromData (pfstBuiltin # x) #== policyId)
+              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+                  pfromData (psndBuiltin # (pheadSingleton # tokens)) #== 1
+              )
+              (self # xs)
+        )
+        (const (pconstant False))
+        # pto val'
+
+pfirstTokenNameWithCS ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term s (PAsData PCurrencySymbol :--> PValue keys amounts :--> PTokenName)
+pfirstTokenNameWithCS = phoistAcyclic $
+  plam $ \policyId val ->
+    pmatch val $ \(PValue val') ->
+      precList
+        ( \self x xs ->
+            pif
+              (pfstBuiltin # x #== policyId)
+              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+                  pfromData $ pfstBuiltin # (phead # tokens)
+              )
+              (self # xs)
+        )
+        (const perror)
+        # pto val'
+
+pvalueOfOne ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term
+    s
+    ( PAsData PCurrencySymbol
+        :--> PValue keys amounts
+        :--> PBool
+    )
+pvalueOfOne = phoistAcyclic $
+  plam $ \policyId val ->
+    pmatch val $ \(PValue val') ->
+      precList
+        ( \self x xs ->
+            pif
+              (pfstBuiltin # x #== policyId)
+              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+                  pfromData (psndBuiltin # (pheadSingleton # tokens)) #== 1
+              )
+              (self # xs)
+        )
+        (const (pconstant False))
+        # pto val'
+
+psingletonOfCS ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term
+    s
+    ( PAsData PCurrencySymbol
+        :--> PValue keys amounts
+        :--> PPair PTokenName PInteger
+    )
+psingletonOfCS = phoistAcyclic $
+  plam $ \policyId val ->
+    pmatch val $ \(PValue val') ->
+      precList
+        ( \self x xs ->
+            pif
+              (pfstBuiltin # x #== policyId)
+              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+                  let tkPair = pheadSingleton # tokens
+                   in pcon (PPair (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
+              )
+              (self # xs)
+        )
+        (const perror)
+        # pto val'

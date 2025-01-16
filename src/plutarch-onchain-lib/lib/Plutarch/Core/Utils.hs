@@ -19,7 +19,6 @@ module Plutarch.Core.Utils(
   pdebug,
   PTxOutH(..),
   pisRewarding,
-  pcountSpendRedeemers,
   ptryFromInlineDatum,
   pfromPDatum,
   pnonew,
@@ -43,10 +42,6 @@ module Plutarch.Core.Utils(
   ptryOutputToAddress,
   ptryOwnOutput,
   ptryOwnInput,
-  pmustFind,
-  pcanFind,
-  pheadSingleton,
-  pisSingleton,
   ptxSignedByPkh,
   (#-),
   pfindWithRest,
@@ -55,13 +50,8 @@ module Plutarch.Core.Utils(
   pfirstTokenName,
   ptryLookupValue,
   pfilterCSFromValue,
-  psingletonOfCS,
-  pvalueOfOne,
-  pvalueOfOneScott,
-  pfirstTokenNameWithCS,
   phasUTxO,
   pvalueContains,
-  ponlyAsset,
   pand'List,
   pcond,
   (#>=),
@@ -75,19 +65,11 @@ module Plutarch.Core.Utils(
   pdivCeil,
   pisScriptCredential,
   pisPubKeyCredential,
-  ptails10,
-  ptails20,
-  ptails30,
-  consAsData,
-  pmkBuiltinList,
-  ponlyLovelaceValueOf,
-  plovelaceValueOf,
   pvalidateConditions,
   pcountInputsFromCred,
 
 ) where
 
-import           Data.List                        (foldl')
 import qualified Data.Text                        as T
 import           Plutarch.Prelude                 
 
@@ -121,7 +103,6 @@ import qualified Plutarch.Monadic                 as P
                                          
 import           Prelude
 import           Plutarch.Internal.Term ( PType ) 
-import           GHC.Generics (Generic)
 
 pfail ::
   forall (s :: S) a.
@@ -159,24 +140,6 @@ data PTxOutH (s :: S) =
 pisRewarding :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisRewarding term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
 
-{- | Count the number of spend plutus scripts executed in the transaction via the txInfoRedeemers list.
-  Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
-  `deriving instance Ord (ConwayPlutusPurpose AsIx era)`
-https://github.com/IntersectMBO/cardano-ledger/blob/d79d41e09da6ab93067acddf624d1a540a3e4e8d/eras/conway/impl/src/Cardano/Ledger/Conway/Scripts.hs#L188
--}
-pcountSpendRedeemers :: forall {s :: S}. Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PInteger
-pcountSpendRedeemers rdmrs =
-    let go :: Term (s :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PInteger)
-        go = pfix #$ plam $ \self n ->
-              pelimList
-                (\x xs ->
-                  let constrPair :: Term (s :: S) (PAsData PScriptPurpose)
-                      constrPair = pfstBuiltin # x
-                      constrIdx = pfstBuiltin # (pasConstr # pforgetData constrPair)
-                  in pif (constrIdx #== 1) (self # (n + 1) # xs) n
-                )
-                n
-     in go # 0 # pto rdmrs
 
 ptryFromInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
 ptryFromInlineDatum = phoistAcyclic $
@@ -212,13 +175,6 @@ punnew :: forall {b :: PType} {s :: S}.
                 PIsData b =>
                 Term s (PDataNewtype b) -> Term s b
 punnew nt = pmatch nt $ \(PDataNewtype bs) -> pfromData bs
-
-data PTriple (a :: PType) (b :: PType) (c :: PType) (s :: S)
-  = PTriple (Term s a) (Term s b) (Term s c)
-  deriving stock (Generic)
-  deriving anyclass (PlutusType, PEq, PShow)
-
-instance DerivePlutusType (PTriple a b c) where type DPTStrat _ = PlutusTypeScott
 
 ppair :: Term s a -> Term s b -> Term s (PPair a b)
 ppair a b = pcon (PPair a b)
@@ -402,28 +358,6 @@ ptryOwnInput = phoistAcyclic $
   plam $ \inputs ownRef ->
     precList (\self x xs -> pletFields @'["outRef", "resolved"] x $ \txInFields -> pif (ownRef #== txInFields.outRef) txInFields.resolved (self # xs)) (const perror) # inputs
 
-pmustFind :: PIsListLike l a => Term s ((a :--> PBool) :--> l a :--> a)
-pmustFind =
-  phoistAcyclic $ plam $ \f -> pfix #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) y (self # ys)) perror xs
-
-pcanFind :: PIsListLike l a => Term s ((a :--> PBool) :--> l a :--> PBool)
-pcanFind =
-  phoistAcyclic $ plam $ \f -> pfix #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) (pconstant True) (self # ys)) perror xs
-
--- Get the head of the list if the list contains exactly one element, otherwise error.
-pheadSingleton :: (PListLike list, PElemConstraint list a) => Term s (list a :--> a)
-pheadSingleton = phoistAcyclic $
-  plam $ \xs ->
-    pelimList
-      (pelimList (\_ _ -> ptraceInfoError "List contains more than one element."))
-      (ptraceInfoError "List is empty.")
-      xs
-
-pisSingleton :: (PIsListLike list a) => Term s (list a) -> Term s PBool
-pisSingleton = pelimList
-      (\_ ys -> pelimList (\_ _ -> pconstant False) (pconstant True) ys)
-      (pconstant False)
-
 ptxSignedByPkh ::
   Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
 ptxSignedByPkh = pelem
@@ -536,106 +470,6 @@ pfilterCSFromValue = phoistAcyclic $
                 pelimList (\x xs -> pif (pfstBuiltin # x #== policyId) xs (pcons # x # (self # xs))) pnil ys
        in pcon (PValue $ pcon $ PMap $ go # mapVal)
 
-psingletonOfCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term
-    s
-    ( PAsData PCurrencySymbol
-        :--> PValue keys amounts
-        :--> PPair PTokenName PInteger
-    )
-psingletonOfCS = phoistAcyclic $
-  plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
-      precList
-        ( \self x xs ->
-            pif
-              (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
-                  let tkPair = pheadSingleton # tokens
-                   in pcon (PPair (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
-              )
-              (self # xs)
-        )
-        (const perror)
-        # pto val'
-
-pvalueOfOne ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term
-    s
-    ( PAsData PCurrencySymbol
-        :--> PValue keys amounts
-        :--> PBool
-    )
-pvalueOfOne = phoistAcyclic $
-  plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
-      precList
-        ( \self x xs ->
-            pif
-              (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
-                  pfromData (psndBuiltin # (pheadSingleton # tokens)) #== 1
-              )
-              (self # xs)
-        )
-        (const (pconstant False))
-        # pto val'
-
-pvalueOfOneScott ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term
-    s
-    ( PCurrencySymbol
-        :--> PValue keys amounts
-        :--> PBool
-    )
-pvalueOfOneScott = phoistAcyclic $
-  plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
-      precList
-        ( \self x xs ->
-            pif
-              (pfromData (pfstBuiltin # x) #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
-                  pfromData (psndBuiltin # (pheadSingleton # tokens)) #== 1
-              )
-              (self # xs)
-        )
-        (const (pconstant False))
-        # pto val'
-
-pfirstTokenNameWithCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PAsData PCurrencySymbol :--> PValue keys amounts :--> PTokenName)
-pfirstTokenNameWithCS = phoistAcyclic $
-  plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
-      precList
-        ( \self x xs ->
-            pif
-              (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
-                  pfromData $ pfstBuiltin # (phead # tokens)
-              )
-              (self # xs)
-        )
-        (const perror)
-        # pto val'
-
 {- | @phasUTxO # oref # inputs@
   ensures that in @inputs@ there is an input having @TxOutRef@ @oref@ .
 -}
@@ -666,24 +500,6 @@ pvalueContains = phoistAcyclic $
               tnMap = pto $ pfromData $ psndBuiltin # csPair
            in pall # forEachTN cs # tnMap
      in pall # forEachCS #$ pto $ pto subset
-
-{- | Extract the token name and the amount of the given currency symbol.
-Throws when the token name is not found or more than one token name is involved
-Plutarch level function.
--}
-ponlyAsset ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PTriple PCurrencySymbol PTokenName PInteger)
-ponlyAsset = phoistAcyclic $
-  plam $ \val ->
-    pmatch val $ \(PValue val') ->
-      plet (pheadSingleton # pto val') $ \valuePair ->
-        pmatch (pfromData (psndBuiltin # valuePair)) $ \(PMap tokens) ->
-          plet (pheadSingleton # tokens) $ \tkPair ->
-            pcon (PTriple (pfromData (pfstBuiltin # valuePair)) (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
 
 pand'List :: [Term s PBool] -> Term s PBool
 pand'List ts' =
@@ -762,47 +578,6 @@ pisScriptCredential cred = (pfstBuiltin # (pasConstr # pforgetData cred)) #== 1
 
 pisPubKeyCredential :: Term s (PAsData PCredential) -> Term s PBool
 pisPubKeyCredential cred = (pfstBuiltin # (pasConstr # pforgetData cred)) #== 0
-
-nTails :: PIsListLike list a => Integer -> Term s (list a) -> Term s (list a)
-nTails n xs = foldl' (\acc _ -> ptail # acc) xs (replicate (fromIntegral n) ())
-
-ptails10 :: PIsListLike list a => ClosedTerm (list a :--> list a)
-ptails10 = phoistAcyclic $ plam (nTails 10)
-ptails20 :: PIsListLike list a => ClosedTerm (list a :--> list a)
-ptails20 = phoistAcyclic $ plam (\xs -> ptails10 # (ptails10 # xs))
-ptails30 :: PIsListLike list a => ClosedTerm (list a :--> list a)
-ptails30 = phoistAcyclic $ plam (\xs -> ptails20 # (ptails10 # xs))
-
-consAsData :: Term s (PAsData x) -> Term s (PBuiltinList PData) -> Term s (PBuiltinList PData)
-consAsData x xs = pcon $ PCons (pforgetData x) xs
-
-pmkBuiltinList :: [Term s PData] -> Term s (PBuiltinList PData)
-pmkBuiltinList = foldr go (pcon PNil)
-  where
-    go :: Term s PData -> Term s (PBuiltinList PData) -> Term s (PBuiltinList PData)
-    go x xs = pcon $ PCons x xs
-
--- Returns the amount of Ada contained in a Value
--- Errors if the Value contains tokens other than Ada
---
--- This function assumes that the first entry in the Value is Ada
--- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
--- So we are guaranteed that this is safe to use for any Value inside the Script Context
-ponlyLovelaceValueOf :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
-ponlyLovelaceValueOf val =
-  let csPairs = pto $ pto val
-      adaEntry = pheadSingleton # csPairs
-  in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
-
--- | Returns the amount of Ada contained in a Value
---
--- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
--- So we are guaranteed that this is safe to use for any Value inside the Script Context
-plovelaceValueOf :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
-plovelaceValueOf val =
-  let csPairs = pto $ pto val
-      adaEntry = phead # csPairs
-  in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
 
 -- | Strictly evaluates a list of boolean expressions.
 -- If all the expressions evaluate to true, returns unit, otherwise throws an error.

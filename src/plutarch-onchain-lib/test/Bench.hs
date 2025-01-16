@@ -11,11 +11,10 @@ import Plutarch.Test.Bench
 import Plutarch.Monadic qualified as P
 import Plutarch.LedgerApi.V3
 import Plutarch.Core.List
-import Plutarch.Core.Utils (pcanFind)
-import Plutarch.Core.FieldBinds 
-import Plutarch.Core.ValidationLogic (penforceNSpendRedeemers)
+import Plutarch.Core.FieldBinds
+import Plutarch.Core.ValidationLogic
 import Plutarch.Maybe
-import Plutarch.Internal.Term 
+import Plutarch.Internal.Term
 import Test.Tasty (TestTree, testGroup)
 import PlutusLedgerApi.V1.Address
 import PlutusLedgerApi.V1.Value
@@ -41,7 +40,7 @@ emptyMintValue = mempty
 mkRedeemer :: Integer -> Redeemer
 mkRedeemer i = Redeemer (PlutusTx.toBuiltinData i)
 
-mkScriptPurpose :: Integer -> ScriptPurpose 
+mkScriptPurpose :: Integer -> ScriptPurpose
 mkScriptPurpose i = Spending (TxOutRef (TxId "") i)
 
 mkTxInfo :: Int -> TxInfo
@@ -90,7 +89,8 @@ main =
       , testGroup "Lengths" lengthBenches
       , testGroup "Is Unique" isUniqueSetBenches
       , testGroup "Find" findBenches
-      , testGroup "Count Spend" countSpendBenches
+      , testGroup "Count Spend Scripts" countSpendBenches
+      , testGroup "Elem At" elemAtBenches
       --, testGroup "Spending Purpose" spendingPurposeBenches
       ]
 
@@ -118,32 +118,41 @@ findBenches :: [TestTree]
 findBenches =
   [ bench "optional" (pisJust #$ pfind # plam (#== 5) # pconstant @(PBuiltinList PInteger) [1..200])
   , bench "bool" (pcanFind # plam (#== 5) # pconstant @(PBuiltinList PInteger) [1..200])
+  , bench "try" (pmustFind # plam (#== 5) # pconstant @(PBuiltinList PInteger) [1..200])
   ]
 
 countSpendBenches :: [TestTree]
 countSpendBenches =
-  [ bench "fastNSpends" 
+  [ bench "recursive" $ pcountSpendRedeemers (pconstant exampleRedeemers) #== 100
+  , bench "fast"
       (penforceNSpendRedeemers 100 (pconstant exampleRedeemers))
   ]
 
+elemAtBenches :: [TestTree]
+elemAtBenches =
+  [ bench "recursive" $ pelemAt' # 199 # pconstant @(PBuiltinList PInteger) [1..200]
+  , bench "fast" $ pelemAtFast # pconstant @(PBuiltinList PInteger) [1..200] # 199 
+  ]
+
+
 spendingPurposeBenches :: [TestTree]
 spendingPurposeBenches =
-  [ bench "generic" 
+  [ bench "generic"
       (mkValidatorGeneric # pconstant (mkScriptContext 2))
-  , bench "specialized"  
+  , bench "specialized"
       (mkValidatorSpecialized # pconstant (mkScriptContext 2))
   ]
 
-mkValidatorGeneric :: ClosedTerm (PScriptContext :--> PUnit) 
-mkValidatorGeneric = plam $ \ctx -> P.do 
+mkValidatorGeneric :: ClosedTerm (PScriptContext :--> PUnit)
+mkValidatorGeneric = plam $ \ctx -> P.do
   ctxF <- pletFields @'["txInfo", "redeemer", "scriptInfo"] ctx
   PSpendingScript scriptInfo <- pmatch ctxF.scriptInfo
   scriptInfoF <- pletFields @'["_1"] scriptInfo
   PDJust ownInDat <- pmatch scriptInfoF._1
   pif (pfromData (punsafeCoerce @(PAsData PInteger) (pto ownInDat)) #> 0) (pconstant ()) perror
 
-mkValidatorSpecialized :: ClosedTerm (PScriptContext :--> PUnit) 
-mkValidatorSpecialized = plam $ \ctx -> P.do 
+mkValidatorSpecialized :: ClosedTerm (PScriptContext :--> PUnit)
+mkValidatorSpecialized = plam $ \ctx -> P.do
   ctxF <- pletFields @'["txInfo", "redeemer", "scriptInfo"] ctx
   scriptInfoF <- pletFieldsSpending ctxF.scriptInfo
   PDJust ownInDat <- pmatch scriptInfoF._1

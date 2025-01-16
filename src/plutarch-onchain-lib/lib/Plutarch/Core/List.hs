@@ -1,4 +1,5 @@
 {-# LANGUAGE QualifiedDo #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
 module Plutarch.Core.List (
@@ -12,17 +13,58 @@ module Plutarch.Core.List (
   emptyByteArray,
   pelemAt',
   pelemAtFlipped',
-  pelemAtFast
+  pelemAtFast,
+  pmustFind,
+  pcanFind,
+  pheadSingleton,
+  pisSingleton,
+  nTails,
+  ptails10,
+  ptails20,
+  ptails30,
+  consAsData,
+  pmkBuiltinList
 ) where
 
 import           Plutarch.Prelude
-import           Plutarch.Core.Utils         (ptails10, ptails20,
-                                              ptails30)
 import           Plutarch.Core.Internal.Builtins       (pcountSetBits', pwriteBits', pindexBS')                                            
 import           Plutarch.Evaluate           (unsafeEvalTerm)
 import           Plutarch.Internal.Term 
 import qualified Plutarch.Monadic            as P
 import           Prelude
+import           Data.List (foldl')
+
+nTails :: PIsListLike list a => Integer -> Term s (list a) -> Term s (list a)
+nTails n xs = foldl' (\acc _ -> ptail # acc) xs (replicate (fromIntegral n) ())
+
+ptails10 :: PIsListLike list a => ClosedTerm (list a :--> list a)
+ptails10 = phoistAcyclic $ plam (nTails 10)
+ptails20 :: PIsListLike list a => ClosedTerm (list a :--> list a)
+ptails20 = phoistAcyclic $ plam (\xs -> ptails10 # (ptails10 # xs))
+ptails30 :: PIsListLike list a => ClosedTerm (list a :--> list a)
+ptails30 = phoistAcyclic $ plam (\xs -> ptails20 # (ptails10 # xs))
+
+-- Get the head of the list if the list contains exactly one element, otherwise error.
+pheadSingleton :: (PListLike list, PElemConstraint list a) => Term s (list a :--> a)
+pheadSingleton = phoistAcyclic $
+  plam $ \xs ->
+    pelimList
+      (pelimList (\_ _ -> ptraceInfoError "List contains more than one element."))
+      (ptraceInfoError "List is empty.")
+      xs
+
+pisSingleton :: (PIsListLike list a) => Term s (list a) -> Term s PBool
+pisSingleton = pelimList
+      (\_ ys -> pelimList (\_ _ -> pconstant False) (pconstant True) ys)
+      (pconstant False)
+
+pmustFind :: PIsListLike l a => Term s ((a :--> PBool) :--> l a :--> a)
+pmustFind =
+  phoistAcyclic $ plam $ \f -> pfix #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) y (self # ys)) perror xs
+
+pcanFind :: PIsListLike l a => Term s ((a :--> PBool) :--> l a :--> PBool)
+pcanFind =
+  phoistAcyclic $ plam $ \f -> pfix #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) (pconstant True) (self # ys)) perror xs
 
 pelemAt' :: PIsListLike l a => Term s (PInteger :--> l a :--> a)
 pelemAt' = phoistAcyclic $
@@ -168,3 +210,13 @@ phasNUniqueElements :: Term s (PInteger :--> PBuiltinList PInteger :--> PBool)
 phasNUniqueElements = phoistAcyclic $ plam $ \n xs ->
   let flagUniqueBits = pwriteBits' # emptyByteArray # xs # pconstant True
   in (pcountSetBits' # flagUniqueBits #== n)
+
+consAsData :: Term s (PAsData x) -> Term s (PBuiltinList PData) -> Term s (PBuiltinList PData)
+consAsData x xs = pcon $ PCons (pforgetData x) xs
+
+pmkBuiltinList :: [Term s PData] -> Term s (PBuiltinList PData)
+pmkBuiltinList = foldr go (pcon PNil)
+  where
+    go :: Term s PData -> Term s (PBuiltinList PData) -> Term s (PBuiltinList PData)
+    go x xs = pcon $ PCons x xs
+    
