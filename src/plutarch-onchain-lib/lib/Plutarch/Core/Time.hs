@@ -63,3 +63,13 @@ ptoCustomFiniteRangeH timeRange = do
   PUpperBound ub <- pmatchC timeRangeF.to
   PFinite ((pfield @"_0" #) -> end) <- pmatchC (pfield @"_0" # ub)
   pure (pnonew $ pfromData start, pnonew $ pfromData end)
+
+pisFinite :: Term s (PInterval PPosixTime :--> PBool)
+pisFinite = plam $ \i ->
+  let isFiniteFrom = pmatch (pfield @"_0" # (pfield @"from" # i)) $ \case
+        PFinite _ -> pconstant True
+        _ -> pconstant False
+      isFiniteTo = pmatch (pfield @"_0" # (pfield @"to" # i)) $ \case
+        PFinite _ -> pconstant True
+        _ -> pconstant False
+   in pand' # isFiniteFrom # isFiniteTo

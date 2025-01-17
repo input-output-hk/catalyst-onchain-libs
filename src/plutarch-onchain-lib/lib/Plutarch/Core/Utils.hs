@@ -26,7 +26,6 @@ module Plutarch.Core.Utils(
   ppair,
   passert,
   pcheck,
-  pcountScriptInputs,
   pfoldl2,
   pelemAtWithRest',
   pmapIdxs,
@@ -45,19 +44,12 @@ module Plutarch.Core.Utils(
   ptxSignedByPkh,
   (#-),
   pfindWithRest,
-  pcountCS,
-  pcountNonAdaCS,
-  pfirstTokenName,
-  ptryLookupValue,
-  pfilterCSFromValue,
   phasUTxO,
-  pvalueContains,
   pand'List,
   pcond,
   (#>=),
   (#>),
   (#/=),
-  pisFinite,
   pmapAndConvertList,
   pintToByteString,
   punwrapPosixTime,
@@ -73,36 +65,27 @@ module Plutarch.Core.Utils(
 import qualified Data.Text                        as T
 import           Plutarch.Prelude                 
 
-import qualified Plutarch.LedgerApi.AssocMap      as AssocMap
 import Plutarch.LedgerApi.V3
     ( KeyGuarantees(Sorted),
-      PMap(..),
-      PExtended(PFinite),
-      PInterval,
       PMaybeData,
       PAddress,
       PCredential(..),
       PPubKeyHash,
       PDatum,
-      PRedeemer,
       PScriptHash,
       PPosixTime(..),
       POutputDatum(POutputDatum),
       PTxOut,
       PScriptInfo,
-      PScriptPurpose,
       PTxInInfo,
       PTxOutRef,
       AmountGuarantees(Positive),
-      PCurrencySymbol,
-      PTokenName,
       PValue(..) )            
-import           Plutarch.LedgerApi.Value         (padaSymbol,
-                                                   pvalueOf)
 import qualified Plutarch.Monadic                 as P
                                          
 import           Prelude
 import           Plutarch.Internal.Term ( PType ) 
+import Plutarch.Core.Value (pvalueContains)
 
 pfail ::
   forall (s :: S) a.
@@ -193,21 +176,6 @@ passert longErrorMsg b inp = pif b inp $ ptraceInfoError (pconstant longErrorMsg
 -- | If the input is True then returns PJust otherwise PNothing
 pcheck :: forall (s :: S) (a :: PType). Term s PBool -> Term s a -> Term s (PMaybe a)
 pcheck b inp = pif b (pcon $ PJust inp) (pcon PNothing)
-
-pcountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
-pcountScriptInputs =
-  phoistAcyclic $
-    let go :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
-        go = pfix #$ plam $ \self n ->
-              pelimList
-                (\x xs ->
-                  let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
-                   in pmatch cred $ \case
-                        PScriptCredential _ -> self # (n + 1) # xs
-                        _ -> self # n # xs
-                )
-                n
-     in go # 0
 
 pfoldl2 ::
   (PListLike listA, PListLike listB, PElemConstraint listA a, PElemConstraint listB b) =>
@@ -384,92 +352,6 @@ pfindWithRest = phoistAcyclic $
         mnil = const (ptraceInfoError "Find")
      in precList mcons mnil # ys # pnil
 
-pcountCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PInteger)
-pcountCS = phoistAcyclic $
-  plam $ \val ->
-    pmatch val $ \(PValue val') ->
-      pmatch val' $ \(PMap csPairs) ->
-        plength # csPairs
-
-pcountNonAdaCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PInteger)
-pcountNonAdaCS =
-  phoistAcyclic $
-    let go :: Term (s2 :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PInteger)
-        go = plet (pdata padaSymbol) $ \padaSymbolD ->
-          pfix #$ plam $ \self n ->
-            pelimList (\x xs -> pif (pfstBuiltin # x #== padaSymbolD) (self # n # xs) (self # (n + 1) # xs)) n
-     in plam $ \val ->
-          pmatch val $ \(PValue val') ->
-            pmatch val' $ \(PMap csPairs) ->
-              go # 0 # csPairs
-
-pfirstTokenName ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PTokenName)
-pfirstTokenName = phoistAcyclic $
-  plam $ \val ->
-    pmatch val $ \(PValue val') ->
-      pmatch val' $ \(PMap csPairs) ->
-        pmatch (pfromData (psndBuiltin # (phead # csPairs))) $ \(PMap tokens) ->
-          pfromData $ pfstBuiltin # (phead # tokens)
-
-ptryLookupValue ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term
-    s
-    ( PAsData PCurrencySymbol
-        :--> PValue keys amounts
-        :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
-    )
-ptryLookupValue = phoistAcyclic $
-  plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
-      precList
-        ( \self x xs ->
-            pif
-              (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
-                  tokens
-              )
-              (self # xs)
-        )
-        (const perror)
-        # pto val'
-
-{- | Removes a currency symbol from a value
--}
-pfilterCSFromValue ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
-        :--> PAsData PCurrencySymbol
-        :--> PValue anyOrder anyAmount
-    )
-pfilterCSFromValue = phoistAcyclic $
-  plam $ \value policyId ->
-      let mapVal = pto (pto value)
-          go = pfix #$ plam $ \self ys ->
-                pelimList (\x xs -> pif (pfstBuiltin # x #== policyId) xs (pcons # x # (self # xs))) pnil ys
-       in pcon (PValue $ pcon $ PMap $ go # mapVal)
-
 {- | @phasUTxO # oref # inputs@
   ensures that in @inputs@ there is an input having @TxOutRef@ @oref@ .
 -}
@@ -482,24 +364,6 @@ phasUTxO ::
 phasUTxO = phoistAcyclic $
   plam $ \oref inInputs ->
     pany @PBuiltinList # plam (\input -> oref #== (pfield @"outRef" # input)) # inInputs
-
-pvalueContains ::
-  ClosedTerm
-    ( PValue 'Sorted 'Positive
-        :--> PValue 'Sorted 'Positive
-        :--> PBool
-    )
-pvalueContains = phoistAcyclic $
-  plam $ \superset subset ->
-    let forEachTN cs = plam $ \tnPair ->
-          let tn = pfromData $ pfstBuiltin # tnPair
-              amount = pfromData $ psndBuiltin # tnPair
-           in amount #<= pvalueOf # superset # cs # tn
-        forEachCS = plam $ \csPair ->
-          let cs = pfromData $ pfstBuiltin # csPair
-              tnMap = pto $ pfromData $ psndBuiltin # csPair
-           in pall # forEachTN cs # tnMap
-     in pall # forEachCS #$ pto $ pto subset
 
 pand'List :: [Term s PBool] -> Term s PBool
 pand'List ts' =
@@ -514,16 +378,6 @@ pand'List ts' =
 (#/=) :: (PEq t) => Term s t -> Term s t -> Term s PBool
 a #/= b = pnot # (a #== b)
 infix 4 #/=
-
-pisFinite :: Term s (PInterval PPosixTime :--> PBool)
-pisFinite = plam $ \i ->
-  let isFiniteFrom = pmatch (pfield @"_0" # (pfield @"from" # i)) $ \case
-        PFinite _ -> pconstant True
-        _ -> pconstant False
-      isFiniteTo = pmatch (pfield @"_0" # (pfield @"to" # i)) $ \case
-        PFinite _ -> pconstant True
-        _ -> pconstant False
-   in pand' # isFiniteFrom # isFiniteTo
 
 pmapAndConvertList :: (PIsListLike listA a, PIsListLike listB b) => Term s ((a :--> b) :--> listA a :--> listB b)
 pmapAndConvertList = phoistAcyclic $

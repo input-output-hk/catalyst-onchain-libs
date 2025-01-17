@@ -59,6 +59,7 @@ library
     Plutarch.Core.PByteString
     Plutarch.Core.Scripts
     Plutarch.Core.Time
+    Plutarch.Core.Unroll
     Plutarch.Core.Utils
     Plutarch.Core.ValidationLogic
     Plutarch.Core.Value

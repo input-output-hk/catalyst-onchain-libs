@@ -18,6 +18,7 @@ module Plutarch.Core.Eval(
   writePlutusScriptTraceBind,
   writePlutusScriptTrace,
   writePlutusScriptNoTrace,
+  calcBudgetNoTraces,
   ) where
 
 import qualified Cardano.Binary              as CBOR
@@ -60,6 +61,15 @@ evalWithArgsT cfg x args = do
   let (escr, budg, trc) = evalScript $ applyArguments cmp args
   scr <- first (pack . show) escr
   pure (scr, budg, trc)
+
+calcBudgetNoTraces :: ClosedTerm a -> [Data] -> ExBudget
+calcBudgetNoTraces x args =
+  let cmp = compile NoTracing x
+  in  case cmp of 
+        Left e -> error $ "Failed to compile term: " <> show e
+        Right scr -> 
+          let (_, budg, _) = evalScript $ applyArguments scr args
+          in budg 
 
 writePlutusScript :: Config -> String -> FilePath -> ClosedTerm a -> IO ()
 writePlutusScript cfg title filepath term = do

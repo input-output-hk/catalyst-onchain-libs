@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QualifiedDo #-}
 {-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Main (main) where
@@ -13,6 +16,7 @@ import Plutarch.LedgerApi.V3
 import Plutarch.Core.List
 import Plutarch.Core.FieldBinds
 import Plutarch.Core.ValidationLogic
+import Plutarch.Core.Unroll
 import Plutarch.Maybe
 import Plutarch.Internal.Term
 import Test.Tasty (TestTree, testGroup)
@@ -91,10 +95,8 @@ main =
       , testGroup "Find" findBenches
       , testGroup "Count Spend Scripts" countSpendBenches
       , testGroup "Elem At" elemAtBenches
-      --, testGroup "Spending Purpose" spendingPurposeBenches
+      , testGroup "Unroll" unrollBench
       ]
-
--- Suites
 
 dropBenches :: [TestTree]
 dropBenches =
@@ -134,26 +136,17 @@ elemAtBenches =
   , bench "fast" $ pelemAtFast # pconstant @(PBuiltinList PInteger) [1..200] # 199 
   ]
 
+unrollLengthBound :: forall list a s. PIsListLike list a => Term s (list a :--> PInteger)
+unrollLengthBound = punrollBound 200 (const $ plam $ \_ -> pconstant (-1)) go 0
+  where
+    go ::
+      (Integer -> Term s (list a :--> PInteger)) ->
+      Integer ->
+      Term s (list a :--> PInteger)
+    go self n = plam $ pelimList (\_ xs -> self (n + 1) # xs) (pconstant n)
 
-spendingPurposeBenches :: [TestTree]
-spendingPurposeBenches =
-  [ bench "generic"
-      (mkValidatorGeneric # pconstant (mkScriptContext 2))
-  , bench "specialized"
-      (mkValidatorSpecialized # pconstant (mkScriptContext 2))
+unrollBench :: [TestTree]
+unrollBench =
+  [ bench "unroll length bound" $ unrollLengthBound # pconstant @(PBuiltinList PInteger) [1..200]
+  , bench "no-unroll recursion" $ plength # pconstant @(PBuiltinList PInteger) [1..200]
   ]
-
-mkValidatorGeneric :: ClosedTerm (PScriptContext :--> PUnit)
-mkValidatorGeneric = plam $ \ctx -> P.do
-  ctxF <- pletFields @'["txInfo", "redeemer", "scriptInfo"] ctx
-  PSpendingScript scriptInfo <- pmatch ctxF.scriptInfo
-  scriptInfoF <- pletFields @'["_1"] scriptInfo
-  PDJust ownInDat <- pmatch scriptInfoF._1
-  pif (pfromData (punsafeCoerce @(PAsData PInteger) (pto ownInDat)) #> 0) (pconstant ()) perror
-
-mkValidatorSpecialized :: ClosedTerm (PScriptContext :--> PUnit)
-mkValidatorSpecialized = plam $ \ctx -> P.do
-  ctxF <- pletFields @'["txInfo", "redeemer", "scriptInfo"] ctx
-  scriptInfoF <- pletFieldsSpending ctxF.scriptInfo
-  PDJust ownInDat <- pmatch scriptInfoF._1
-  pif (pfromData (punsafeCoerce @(PAsData PInteger) (pto ownInDat)) #> 0) (pconstant ()) perror

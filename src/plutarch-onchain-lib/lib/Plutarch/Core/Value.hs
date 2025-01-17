@@ -282,3 +282,136 @@ psingletonOfCS = phoistAcyclic $
         )
         (const perror)
         # pto val'
+
+{- | Lookup the list of token-quantity pairs for a given currency symbol in a value.
+     If the currency symbol is not found, the function will throw an error.
+
+     This function takes a currency symbol and a value, and returns the list of token-quantity pairs
+     associated with that currency symbol. The value is represented as a `PValue` which is a map of
+     currency symbols to lists of token-quantity pairs. The function traverses this map to find the
+     matching currency symbol and returns the associated list of token-quantity pairs.
+
+     If the currency symbol is not found in the value, the function will throw an error using `perror`.
+
+     Example usage:
+
+     @
+     let currencySymbol = ...
+         value = ...
+     in ptryLookupValue # currencySymbol # value
+     @
+
+     This will return the list of token-quantity pairs for the given currency symbol, or throw an error
+     if the currency symbol is not found.
+
+     Arguments:
+     * `policyId` - The currency symbol to look up.
+     * `val` - The value to search within.
+
+     Returns:
+     * A builtin list of token-quantity pairs associated with the given currency symbol.
+
+-}
+ptryLookupValue ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term
+    s
+    ( PAsData PCurrencySymbol
+        :--> PValue keys amounts
+        :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+    )
+ptryLookupValue = phoistAcyclic $
+  plam $ \policyId val ->
+    pmatch val $ \(PValue val') ->
+      precList
+        ( \self x xs ->
+            pif
+              (pfstBuiltin # x #== policyId)
+              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+                  tokens
+              )
+              (self # xs)
+        )
+        (const perror)
+        # pto val'
+
+{- | Removes a currency symbol from a value
+-}
+pfilterCSFromValue ::
+  forall
+    (anyOrder :: KeyGuarantees)
+    (anyAmount :: AmountGuarantees).
+  ClosedTerm
+    ( PValue anyOrder anyAmount
+        :--> PAsData PCurrencySymbol
+        :--> PValue anyOrder anyAmount
+    )
+pfilterCSFromValue = phoistAcyclic $
+  plam $ \value policyId ->
+      let mapVal = pto (pto value)
+          go = pfix #$ plam $ \self ys ->
+                pelimList (\x xs -> pif (pfstBuiltin # x #== policyId) xs (pcons # x # (self # xs))) pnil ys
+       in pcon (PValue $ pcon $ PMap $ go # mapVal)
+
+pvalueContains ::
+  ClosedTerm
+    ( PValue 'Sorted 'Positive
+        :--> PValue 'Sorted 'Positive
+        :--> PBool
+    )
+pvalueContains = phoistAcyclic $
+  plam $ \superset subset ->
+    let forEachTN cs = plam $ \tnPair ->
+          let tn = pfromData $ pfstBuiltin # tnPair
+              amount = pfromData $ psndBuiltin # tnPair
+           in amount #<= pvalueOf # superset # cs # tn
+        forEachCS = plam $ \csPair ->
+          let cs = pfromData $ pfstBuiltin # csPair
+              tnMap = pto $ pfromData $ psndBuiltin # csPair
+           in pall # forEachTN cs # tnMap
+     in pall # forEachCS #$ pto $ pto subset
+
+pfirstTokenName ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term s (PValue keys amounts :--> PTokenName)
+pfirstTokenName = phoistAcyclic $
+  plam $ \val ->
+    pmatch val $ \(PValue val') ->
+      pmatch val' $ \(PMap csPairs) ->
+        pmatch (pfromData (psndBuiltin # (phead # csPairs))) $ \(PMap tokens) ->
+          pfromData $ pfstBuiltin # (phead # tokens)
+
+pcountCS ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term s (PValue keys amounts :--> PInteger)
+pcountCS = phoistAcyclic $
+  plam $ \val ->
+    pmatch val $ \(PValue val') ->
+      pmatch val' $ \(PMap csPairs) ->
+        plength # csPairs
+
+pcountNonAdaCS ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S).
+  Term s (PValue keys amounts :--> PInteger)
+pcountNonAdaCS =
+  phoistAcyclic $
+    let go :: Term (s2 :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PInteger)
+        go = plet (pdata padaSymbol) $ \padaSymbolD ->
+          pfix #$ plam $ \self n ->
+            pelimList (\x xs -> pif (pfstBuiltin # x #== padaSymbolD) (self # n # xs) (self # (n + 1) # xs)) n
+     in plam $ \val ->
+          pmatch val $ \(PValue val') ->
+            pmatch val' $ \(PMap csPairs) ->
+              go # 0 # csPairs
