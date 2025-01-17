@@ -1,7 +1,7 @@
 module Plutarch.Core.ValidationLogic where
 
 import Plutarch.Prelude
-import Plutarch.LedgerApi.V3 (PScriptPurpose, PRedeemer)
+import Plutarch.LedgerApi.V3 (PScriptPurpose, PRedeemer, PCredential (..), PTxInInfo)
 import qualified Plutarch.LedgerApi.AssocMap as AssocMap
 import Plutarch.Core.List (pdropFast)
 
@@ -48,3 +48,18 @@ pcountSpendRedeemers rdmrs =
                 )
                 n
      in go # 0 # pto rdmrs
+
+pcountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
+pcountScriptInputs =
+  phoistAcyclic $
+    let go :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
+        go = pfix #$ plam $ \self n ->
+              pelimList
+                (\x xs ->
+                  let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+                   in pmatch cred $ \case
+                        PScriptCredential _ -> self # (n + 1) # xs
+                        _ -> self # n # xs
+                )
+                n
+     in go # 0     

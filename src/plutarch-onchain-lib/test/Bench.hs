@@ -147,6 +147,6 @@ unrollLengthBound = punrollBound 200 (const $ plam $ \_ -> pconstant (-1)) go 0
 
 unrollBench :: [TestTree]
 unrollBench =
-  [ bench "unroll length bound" $ unrollLengthBound # pconstant @(PBuiltinList PInteger) [1..200]
-  , bench "no-unroll recursion" $ plength # pconstant @(PBuiltinList PInteger) [1..200]
+  [ bench "bounded-unroll length" $ unrollLengthBound # pconstant @(PBuiltinList PInteger) [1..200]
+  , bench "no-unroll recursive length" $ plength # pconstant @(PBuiltinList PInteger) [1..200]
   ]
