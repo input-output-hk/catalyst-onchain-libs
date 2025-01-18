@@ -9,6 +9,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Plutarch.Core.Value where
 
@@ -374,6 +375,44 @@ pvalueContains = phoistAcyclic $
            in pall # forEachTN cs # tnMap
      in pall # forEachCS #$ pto $ pto subset
 
+-- TODO: Complete this function. 
+-- pvalueContainsFast ::
+--   ClosedTerm
+--     ( PValue 'Sorted 'Positive
+--         :--> PValue 'Sorted 'Positive
+--         :--> PBool
+--     )
+-- pvalueContainsFast = phoistAcyclic $ plam $ \superValue subValue -> 
+--   let go :: Term (s2 :: S) (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBool)
+--       go = pfix #$ plam $ \self superSet subSet ->
+--             pelimList (\superCSPair superCSPairs -> 
+--               pelimList (\subCSPair subCSPairs -> 
+--                 let superCS = pfromData $ pfstBuiltin # superCSPair
+--                     subCS = pfromData $ pfstBuiltin # subCSPair
+--                 in 
+--                   pif (superCS #< subCSPair)
+--                       (self # superCSPairs # subSet)
+--                       ( 
+--                         pif (superCS #== subCS)
+--                             ( pconstant True)
+--                             (pconstant False)
+--                       )
+              
+--               ) 
+--               (pconstant True)
+--               subSet
+--              ) (pconstant False) superSet 
+--     innerVal :: Term _ (PMap Sorted PCurrencySymbol (PMap Sorted PTokenName PInteger))
+--     innerVal = pto superValue
+--     tokensMap :: Term
+--                   _
+--                   (PBuiltinList
+--                     (PBuiltinPair
+--                         (PAsData PCurrencySymbol)
+--                         (PAsData (PMap Sorted PTokenName PInteger))))
+--     tokensMap = pto innerVal 
+--  in go # tokensMap # pto (pto subValue)
+
 pfirstTokenName ::
   forall
     (keys :: KeyGuarantees)
@@ -415,3 +454,29 @@ pcountNonAdaCS =
           pmatch val $ \(PValue val') ->
             pmatch val' $ \(PMap csPairs) ->
               go # 0 # csPairs
+
+-- | Strip Ada from a ledger value
+-- This assumes that Ada is the first entry in the Value. If Ada is not the first entry, this function assumes the value does not 
+-- contain Ada and thus will just return the value as provided. 
+pstripAdaSafe ::
+  forall
+    (v :: AmountGuarantees)
+    (s :: S).
+  Term s (PValue 'Sorted v :--> PValue 'Sorted v)
+pstripAdaSafe = phoistAcyclic $
+  plam $ \value ->
+    let valMap = pto (pto value)
+        firstEntryCS = pfstBuiltin # (phead # valMap)
+        nonAdaValueMapInner = ptail # valMap
+     in pif (firstEntryCS #== padaSymbolData) (pcon (PValue $ pcon $ PMap nonAdaValueMapInner)) value 
+
+-- | Strip Ada from a ledger value
+-- Importantly this function assumes that the Value is provided by the ledger (i.e. via the ScriptContext)
+-- and thus the invariant that Ada is the first entry in the Value is maintained.
+pstripAda ::
+  forall (v :: AmountGuarantees) (s :: S).
+  Term s (PValue 'Sorted v :--> PValue 'Sorted v)
+pstripAda = phoistAcyclic $
+  plam $ \value ->
+    let nonAdaValueMapInner = ptail # pto (pto value)
+    in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)

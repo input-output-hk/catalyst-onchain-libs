@@ -90,7 +90,10 @@ test-suite plutarch-onchain-lib-tests
   import:         lang
   type:           exitcode-stdio-1.0
   main-is:        Test.hs
-  other-modules:  Plutarch.MerkleTree.Test
+  other-modules:
+    Plutarch.List.Test
+    Plutarch.MerkleTree.Test
+
   hs-source-dirs: test
   build-depends:
     , base

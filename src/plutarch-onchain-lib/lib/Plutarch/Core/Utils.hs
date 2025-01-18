@@ -57,9 +57,6 @@ module Plutarch.Core.Utils(
   pdivCeil,
   pisScriptCredential,
   pisPubKeyCredential,
-  pvalidateConditions,
-  pcountInputsFromCred,
-
 ) where
 
 import qualified Data.Text                        as T
@@ -432,23 +429,3 @@ pisScriptCredential cred = (pfstBuiltin # (pasConstr # pforgetData cred)) #== 1
 
 pisPubKeyCredential :: Term s (PAsData PCredential) -> Term s PBool
 pisPubKeyCredential cred = (pfstBuiltin # (pasConstr # pforgetData cred)) #== 0
-
--- | Strictly evaluates a list of boolean expressions.
--- If all the expressions evaluate to true, returns unit, otherwise throws an error.
-pvalidateConditions :: [Term s PBool] -> Term s PUnit
-pvalidateConditions conds =
-  pif (pand'List conds)
-      (pconstant ())
-      perror
-
-pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
-pcountInputsFromCred =
-  phoistAcyclic $ plam $ \cred txIns ->
-    let go = pfix #$ plam $ \self n ->
-              pelimList
-                (\x xs ->
-                  let inputCred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
-                   in pif (cred #== inputCred) (self # (n + 1) # xs) (self # n # xs)
-                )
-                n
-     in go # 0 # txIns

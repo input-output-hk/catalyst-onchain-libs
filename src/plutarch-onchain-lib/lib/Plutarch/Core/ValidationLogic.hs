@@ -1,9 +1,14 @@
+{-# LANGUAGE OverloadedRecordDot #-}
+
 module Plutarch.Core.ValidationLogic where
 
 import Plutarch.Prelude
-import Plutarch.LedgerApi.V3 (PScriptPurpose, PRedeemer, PCredential (..), PTxInInfo)
+import Plutarch.LedgerApi.V3 (PScriptPurpose, PRedeemer, PCredential (..), PTxInInfo, PValue, KeyGuarantees(..), AmountGuarantees (..), PTxOut)
 import qualified Plutarch.LedgerApi.AssocMap as AssocMap
 import Plutarch.Core.List (pdropFast)
+import Plutarch.Core.Utils (pand'List)
+import PlutusLedgerApi.V3 (Value)
+import Plutarch.Unsafe (punsafeCoerce)
 
 {- | Check that there is exactly n spend plutus scripts executed in the transaction via the txInfoRedeemers list.
     Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
@@ -63,3 +68,67 @@ pcountScriptInputs =
                 )
                 n
      in go # 0     
+
+pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
+pcountInputsFromCred =
+  phoistAcyclic $ plam $ \cred txIns ->
+    let go = pfix #$ plam $ \self n ->
+              pelimList
+                (\x xs ->
+                  let inputCred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+                   in pif (cred #== inputCred) (self # (n + 1) # xs) (self # n # xs)
+                )
+                n
+     in go # 0 # txIns
+
+emptyValue :: Value
+emptyValue = mempty
+
+pemptyLedgerValue :: ClosedTerm (PValue 'Sorted 'Positive)
+pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
+
+pvalueFromCred :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PValue 'Sorted 'Positive)
+pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
+  (pfix #$ plam $ \self acc ->
+    pelimList
+      (\txIn xs ->
+        self
+          # pletFields @'["address", "value"] (pfield @"resolved" # txIn) (\txInF ->
+                pif ((pfield @"credential" # txInF.address) #== cred)
+                    (acc <> pfromData txInF.value)  
+                    acc
+                    )
+          # xs
+      )
+      acc
+  )
+  # pemptyLedgerValue
+  # inputs
+
+pvalueToCred :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxOut) :--> PValue 'Sorted 'Positive)
+pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
+  let value = (pfix #$ plam $ \self acc ->
+                pelimList
+                  (\txOut xs ->
+                    self
+                      # pletFields @'["address", "value"] txOut (\txOutF ->
+                          plet txOutF.address $ \addr ->
+                            pif (pfield @"credential" # addr #== cred)
+                                (acc <> pfromData txOutF.value)
+                                acc
+                                )
+                      # xs
+                  )
+                  acc
+              )
+              # pemptyLedgerValue
+              # inputs
+  in value
+  
+-- | Strictly evaluates a list of boolean expressions.
+-- If all the expressions evaluate to true, returns unit, otherwise throws an error.
+pvalidateConditions :: [Term s PBool] -> Term s PUnit
+pvalidateConditions conds =
+  pif (pand'List conds)
+      (pconstant ())
+      perror
