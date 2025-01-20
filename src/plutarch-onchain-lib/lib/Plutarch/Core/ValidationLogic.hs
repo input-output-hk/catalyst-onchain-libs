@@ -1,14 +1,25 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 
-module Plutarch.Core.ValidationLogic where
+module Plutarch.Core.ValidationLogic (
+  penforceNSpendRedeemers
+  , pcountSpendRedeemers
+  , pcountScriptInputs
+  , pcountInputsFromCred
+  , pvalidateConditions
+  , pvalueFromCred
+  , pvalueToCred
+  , pemptyLedgerValue
+) where
 
-import Plutarch.Prelude
-import Plutarch.LedgerApi.V3 (PScriptPurpose, PRedeemer, PCredential (..), PTxInInfo, PValue, KeyGuarantees(..), AmountGuarantees (..), PTxOut)
-import qualified Plutarch.LedgerApi.AssocMap as AssocMap
 import Plutarch.Core.List (pdropFast)
 import Plutarch.Core.Utils (pand'List)
-import PlutusLedgerApi.V3 (Value)
+import Plutarch.LedgerApi.AssocMap qualified as AssocMap
+import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
+                              PCredential (..), PRedeemer, PScriptPurpose,
+                              PTxInInfo, PTxOut, PValue)
+import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
+import PlutusLedgerApi.V3 (Value)
 
 {- | Check that there is exactly n spend plutus scripts executed in the transaction via the txInfoRedeemers list.
     Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
@@ -37,7 +48,7 @@ penforceNSpendRedeemers n rdmrs =
     Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
     `deriving instance Ord (ConwayPlutusPurpose AsIx era)`
     See: https://github.com/IntersectMBO/cardano-ledger/blob/d79d41e09da6ab93067acddf624d1a540a3e4e8d/eras/conway/impl/src/Cardano/Ledger/Conway/Scripts.hs#L188
-    
+
     This assumption holds true for any valid transaction, because it is enforced by the ledger rules.
 -}
 pcountSpendRedeemers :: forall {s :: S}. Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PInteger
@@ -67,7 +78,7 @@ pcountScriptInputs =
                         _ -> self # n # xs
                 )
                 n
-     in go # 0     
+     in go # 0
 
 pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 pcountInputsFromCred =
@@ -95,7 +106,7 @@ pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
         self
           # pletFields @'["address", "value"] (pfield @"resolved" # txIn) (\txInF ->
                 pif ((pfield @"credential" # txInF.address) #== cred)
-                    (acc <> pfromData txInF.value)  
+                    (acc <> pfromData txInF.value)
                     acc
                     )
           # xs
@@ -124,7 +135,7 @@ pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
               # pemptyLedgerValue
               # inputs
   in value
-  
+
 -- | Strictly evaluates a list of boolean expressions.
 -- If all the expressions evaluate to true, returns unit, otherwise throws an error.
 pvalidateConditions :: [Term s PBool] -> Term s PUnit

@@ -1,28 +1,55 @@
-{-# LANGUAGE CPP                  #-}
-{-# LANGUAGE PolyKinds            #-}
-{-# LANGUAGE QualifiedDo          #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE QualifiedDo           #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
-module Plutarch.Core.Value where
+module Plutarch.Core.Value (
+  pfindCurrencySymbolsByTokenPrefix,
+  pfindCurrencySymbolsByTokenName,
+  phasDataCS,
+  phasCS,
+  pcontainsCurrencySymbols,
+  pcountOfUniqueTokens,
+  psubtractValue,
+  pvalueSingleton,
+  ponlyLovelaceValueOf,
+  plovelaceValueOfFast,
+  ponlyAsset,
+  pvalueOfOneScott,
+  pfirstTokenNameWithCS,
+  pvalueOfOne,
+  psingletonOfCS,
+  ptryLookupValue,
+  pfilterCSFromValue,
+  pvalueContains,
+  pfirstTokenName,
+  pcountCS,
+  pcountNonAdaCS,
+  pstripAdaSafe,
+  pstripAda,
+) where
 
-import Plutarch.Prelude
-import Plutarch.LedgerApi.V3
-import Plutarch.Core.PByteString(pisPrefixOf)
-import Plutarch.LedgerApi.Value
-import qualified Plutarch.LedgerApi.Value as Value
-import qualified Plutarch.LedgerApi.AssocMap as AssocMap
-import Plutarch.Internal.Term (punsafeCoerce, PType)
-import Plutarch.Core.Internal.Builtins ( pmapData, ppairDataBuiltinRaw )
-import Plutarch.Core.List (pheadSingleton)
 import GHC.Generics (Generic)
+import Plutarch.Core.Internal.Builtins (pmapData, ppairDataBuiltinRaw)
+import Plutarch.Core.List (pheadSingleton)
+import Plutarch.Core.PByteString (pisPrefixOf)
+import Plutarch.Internal.Term (PType, punsafeCoerce)
+import Plutarch.LedgerApi.AssocMap qualified as AssocMap
+import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
+                              KeyGuarantees (Sorted), PCurrencySymbol,
+                              PMap (..), PTokenName, PValue (..))
+import Plutarch.LedgerApi.Value (padaSymbol, padaSymbolData, pnormalize,
+                                 pvalueOf)
+import Plutarch.LedgerApi.Value qualified as Value
+import Plutarch.Prelude
 
 {- | Finds the associated Currency symbols that contain token names prefixed with the ByteString.
 -}
@@ -153,8 +180,8 @@ ponlyLovelaceValueOf val =
 --
 -- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
 -- So we are guaranteed that this is safe to use for any Value inside the Script Context
-plovelaceValueOf :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
-plovelaceValueOf val =
+plovelaceValueOfFast :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
+plovelaceValueOfFast val =
   let csPairs = pto $ pto val
       adaEntry = phead # csPairs
   in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
@@ -375,33 +402,33 @@ pvalueContains = phoistAcyclic $
            in pall # forEachTN cs # tnMap
      in pall # forEachCS #$ pto $ pto subset
 
--- TODO: Complete this function. 
+-- TODO: Complete this function.
 -- pvalueContainsFast ::
 --   ClosedTerm
 --     ( PValue 'Sorted 'Positive
 --         :--> PValue 'Sorted 'Positive
 --         :--> PBool
 --     )
--- pvalueContainsFast = phoistAcyclic $ plam $ \superValue subValue -> 
+-- pvalueContainsFast = phoistAcyclic $ plam $ \superValue subValue ->
 --   let go :: Term (s2 :: S) (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBool)
 --       go = pfix #$ plam $ \self superSet subSet ->
---             pelimList (\superCSPair superCSPairs -> 
---               pelimList (\subCSPair subCSPairs -> 
+--             pelimList (\superCSPair superCSPairs ->
+--               pelimList (\subCSPair subCSPairs ->
 --                 let superCS = pfromData $ pfstBuiltin # superCSPair
 --                     subCS = pfromData $ pfstBuiltin # subCSPair
---                 in 
+--                 in
 --                   pif (superCS #< subCSPair)
 --                       (self # superCSPairs # subSet)
---                       ( 
+--                       (
 --                         pif (superCS #== subCS)
 --                             ( pconstant True)
 --                             (pconstant False)
 --                       )
-              
---               ) 
+
+--               )
 --               (pconstant True)
 --               subSet
---              ) (pconstant False) superSet 
+--              ) (pconstant False) superSet
 --     innerVal :: Term _ (PMap Sorted PCurrencySymbol (PMap Sorted PTokenName PInteger))
 --     innerVal = pto superValue
 --     tokensMap :: Term
@@ -410,7 +437,7 @@ pvalueContains = phoistAcyclic $
 --                     (PBuiltinPair
 --                         (PAsData PCurrencySymbol)
 --                         (PAsData (PMap Sorted PTokenName PInteger))))
---     tokensMap = pto innerVal 
+--     tokensMap = pto innerVal
 --  in go # tokensMap # pto (pto subValue)
 
 pfirstTokenName ::
@@ -456,8 +483,8 @@ pcountNonAdaCS =
               go # 0 # csPairs
 
 -- | Strip Ada from a ledger value
--- This assumes that Ada is the first entry in the Value. If Ada is not the first entry, this function assumes the value does not 
--- contain Ada and thus will just return the value as provided. 
+-- This assumes that Ada is the first entry in the Value. If Ada is not the first entry, this function assumes the value does not
+-- contain Ada and thus will just return the value as provided.
 pstripAdaSafe ::
   forall
     (v :: AmountGuarantees)
@@ -468,7 +495,7 @@ pstripAdaSafe = phoistAcyclic $
     let valMap = pto (pto value)
         firstEntryCS = pfstBuiltin # (phead # valMap)
         nonAdaValueMapInner = ptail # valMap
-     in pif (firstEntryCS #== padaSymbolData) (pcon (PValue $ pcon $ PMap nonAdaValueMapInner)) value 
+     in pif (firstEntryCS #== padaSymbolData) (pcon (PValue $ pcon $ PMap nonAdaValueMapInner)) value
 
 -- | Strip Ada from a ledger value
 -- Importantly this function assumes that the Value is provided by the ledger (i.e. via the ScriptContext)

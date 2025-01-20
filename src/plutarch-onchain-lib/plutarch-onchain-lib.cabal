@@ -76,7 +76,6 @@ library
     , base16-bytestring
     , bytestring
     , cardano-binary
-    , generics-sop
     , plutarch
     , plutarch-ledger-api
     , plutus-core

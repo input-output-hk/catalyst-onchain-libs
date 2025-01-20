@@ -1,20 +1,28 @@
 {-# LANGUAGE CPP                  #-}
-{-# LANGUAGE PolyKinds            #-}
-{-# LANGUAGE QualifiedDo          #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE QualifiedDo          #-}
 {-# LANGUAGE RankNTypes           #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module Plutarch.Core.FieldBinds where
+module Plutarch.Core.FieldBinds (
+  PSpendingScriptHRec,
+  PRewardingScriptHRec,
+  PMintingScriptHRec,
+  pletFieldsSpending,
+  pletFieldsMinting,
+  pletFieldsRewarding,
+) where
 
+import Plutarch.DataRepr.Internal.Field (HRec (..), Labeled (Labeled))
+import Plutarch.Internal.Term (PType, punsafeCoerce)
+import Plutarch.LedgerApi.V3 (PCredential, PCurrencySymbol, PDatum, PMaybeData,
+                              PScriptInfo, PTxOutRef)
 import Plutarch.Prelude
-import Plutarch.LedgerApi.V3
-import Plutarch.DataRepr.Internal.Field
-import Plutarch.Internal.Term
 
 
 type PMintingScriptHRec (s :: S) =

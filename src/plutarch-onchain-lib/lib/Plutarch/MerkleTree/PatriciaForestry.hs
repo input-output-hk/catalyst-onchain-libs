@@ -1,10 +1,10 @@
-{-# LANGUAGE OverloadedRecordDot   #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes     #-}
+{-# LANGUAGE FlexibleInstances       #-}
+{-# LANGUAGE OverloadedRecordDot     #-}
+{-# LANGUAGE OverloadedStrings       #-}
+{-# LANGUAGE PartialTypeSignatures   #-}
+{-# LANGUAGE TemplateHaskell         #-}
+{-# LANGUAGE UndecidableInstances    #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
@@ -42,19 +42,16 @@ module Plutarch.MerkleTree.PatriciaForestry(
   pdo_fork
 ) where
 
-import           Plutarch.Builtin.Crypto      (pblake2b_256)
-import           Plutarch.DataRepr
-import           Plutarch.Internal.Lift
-import           Plutarch.Core.Internal.Builtins          (pconsBS')
-import           Plutarch.MerkleTree.Helpers  (pcombine, pnibble, pnibbles,
-                                               psuffix)
-import           Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash,
-                                               psparse_merkle_16)
-import           Plutarch.Prelude
+import GHC.Generics (Generic)
+import Plutarch.Builtin.Crypto (pblake2b_256)
+import Plutarch.Core.Internal.Builtins (pconsBS')
+import Plutarch.DataRepr
+import Plutarch.Internal.Lift
+import Plutarch.MerkleTree.Helpers (pcombine, pnibble, pnibbles, psuffix)
+import Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash, psparse_merkle_16)
+import Plutarch.Prelude
+import PlutusTx qualified
 import PlutusTx.Builtins.Internal (BuiltinByteString (BuiltinByteString))
---import           PlutusLedgerApi.V2           (BuiltinByteString)
-import           GHC.Generics (Generic)
-import qualified PlutusTx
 
 -- Constants
 
@@ -74,6 +71,8 @@ newtype PMerklePatriciaForestry (s :: S) = PMerklePatriciaForestry (Term s PByte
 
 instance DerivePlutusType PMerklePatriciaForestry where type DPTStrat _ = PlutusTypeNewtype
 
+-- TODO:
+-- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
 -- instance
 --   PLiftable PMerklePatriciaForestry
 --   where
@@ -92,6 +91,8 @@ instance {-# OVERLAPPING #-} PLiftable PMerklePatriciaForestry where
   {-# INLINEABLE fromPlutarch #-}
   fromPlutarch = fromPlutarchUni
 
+-- TODO:
+-- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
 -- deriving via
 --   DeriveDataPLiftable PMerklePatriciaForestry MerklePatriciaForestry
 --   instance

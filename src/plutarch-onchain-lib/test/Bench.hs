@@ -1,33 +1,35 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QualifiedDo #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE CPP                  #-}
+{-# LANGUAGE OverloadedRecordDot  #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PolyKinds            #-}
+{-# LANGUAGE QualifiedDo          #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns         #-}
 
 module Main (main) where
 
-import Plutarch.Prelude
-import Plutarch.Internal.Lift
-import Plutarch.Test.Bench
-import Plutarch.Monadic qualified as P
-import Plutarch.LedgerApi.V3
-import Plutarch.Core.List
 import Plutarch.Core.FieldBinds
-import Plutarch.Core.ValidationLogic
+import Plutarch.Core.List
 import Plutarch.Core.Unroll
-import Plutarch.Maybe
+import Plutarch.Core.ValidationLogic
+import Plutarch.Internal.Lift
 import Plutarch.Internal.Term
-import Test.Tasty (TestTree, testGroup)
+import Plutarch.LedgerApi.V3
+import Plutarch.Maybe
+import Plutarch.Monadic qualified as P
+import Plutarch.Prelude
+import Plutarch.Test.Bench
 import PlutusLedgerApi.V1.Address
 import PlutusLedgerApi.V1.Value
-import PlutusLedgerApi.V3 (ScriptHash(..), OutputDatum (NoOutputDatum), PubKeyHash (..), Redeemer (..), TxInInfo(..),
-                           ScriptContext (..), ScriptInfo (SpendingScript), TxId (..), TxInfo (..),
-                           TxOut (..), TxOutRef (..), always, Datum(..), ScriptPurpose(..))
+import PlutusLedgerApi.V3 (Datum (..), OutputDatum (NoOutputDatum),
+                           PubKeyHash (..), Redeemer (..), ScriptContext (..),
+                           ScriptHash (..), ScriptInfo (SpendingScript),
+                           ScriptPurpose (..), TxId (..), TxInInfo (..),
+                           TxInfo (..), TxOut (..), TxOutRef (..), always)
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as Map
 import PlutusTx.Builtins qualified as PlutusTx
+import Test.Tasty (TestTree, testGroup)
 
 -- | A very crude deterministic generator for 'ScriptContext's with size
 -- approximately proportional to the input integer.
@@ -136,7 +138,7 @@ countSpendBenches =
 elemAtBenches :: [TestTree]
 elemAtBenches =
   [ bench "recursive" $ pelemAt' # 199 # pconstant @(PBuiltinList PInteger) [1..200]
-  , bench "fast" $ pelemAtFast # pconstant @(PBuiltinList PInteger) [1..200] # 199 
+  , bench "fast" $ pelemAtFast # pconstant @(PBuiltinList PInteger) [1..200] # 199
   ]
 
 unrollLengthBound :: forall list a s. PIsListLike list a => Term s (list a :--> PInteger)
@@ -160,14 +162,14 @@ punrolledCountScriptInputs = punrollBound 100 (const def) go () # 0
         (\x xs' ->
           let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
               count = pmatch cred $ \case
-                PScriptCredential _ -> (n + 1) 
+                PScriptCredential _ -> (n + 1)
                 _ -> n
            in self () # count # xs'
         )
         n
 
 punrolledCountScriptInputsUnboundWhole :: Term s (PBuiltinList PTxInInfo :--> PInteger)
-punrolledCountScriptInputsUnboundWhole = punrollUnboundWhole 20 go #$ 0 -- pfix # plam go #$ 0
+punrolledCountScriptInputsUnboundWhole = punrollUnboundWhole 20 go #$ 0
   where
     go :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger) -> Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
     go self = plam $ \n ->
@@ -175,12 +177,12 @@ punrolledCountScriptInputsUnboundWhole = punrollUnboundWhole 20 go #$ 0 -- pfix 
         (\x xs' ->
           let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
               count = pmatch cred $ \case
-                PScriptCredential _ -> (n + 1) 
+                PScriptCredential _ -> (n + 1)
                 _ -> n
            in self # count # xs'
         )
         n
-        
+
 unrollBench :: [TestTree]
 unrollBench =
   [ bench "bounded-unroll length" $ unrollLengthBound # pconstant @(PBuiltinList PInteger) [1..200]
