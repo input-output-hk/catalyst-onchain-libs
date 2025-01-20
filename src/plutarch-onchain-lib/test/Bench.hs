@@ -8,7 +8,6 @@
 
 module Main (main) where
 
-import Plutarch.Core.FieldBinds
 import Plutarch.Core.List
 import Plutarch.Core.Unroll
 import Plutarch.Core.ValidationLogic
@@ -16,25 +15,23 @@ import Plutarch.Internal.Lift
 import Plutarch.Internal.Term
 import Plutarch.LedgerApi.V3
 import Plutarch.Maybe
-import Plutarch.Monadic qualified as P
 import Plutarch.Prelude
 import Plutarch.Test.Bench
 import PlutusLedgerApi.V1.Address
 import PlutusLedgerApi.V1.Value
 import PlutusLedgerApi.V3 (Datum (..), OutputDatum (NoOutputDatum),
-                           PubKeyHash (..), Redeemer (..), ScriptContext (..),
-                           ScriptHash (..), ScriptInfo (SpendingScript),
-                           ScriptPurpose (..), TxId (..), TxInInfo (..),
-                           TxInfo (..), TxOut (..), TxOutRef (..), always)
+                           Redeemer (..), ScriptContext (..), ScriptHash (..),
+                           ScriptInfo (SpendingScript), ScriptPurpose (..),
+                           TxId (..), TxInInfo (..), TxInfo (..), TxOut (..),
+                           TxOutRef (..), always)
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as Map
-import PlutusTx.Builtins qualified as PlutusTx
 import Test.Tasty (TestTree, testGroup)
 
 -- | A very crude deterministic generator for 'ScriptContext's with size
 -- approximately proportional to the input integer.
-mkScriptContext :: Int -> ScriptContext
-mkScriptContext i =
+_mkScriptContext :: Int -> ScriptContext
+_mkScriptContext i =
   ScriptContext
     (mkTxInfo i)
     (Redeemer (PlutusTx.toBuiltinData (1 :: Integer)))
@@ -80,8 +77,8 @@ mkTxOut i = TxOut {
 mkValue :: Int -> Value
 mkValue i = assetClassValue (assetClass adaSymbol adaToken) (fromIntegral i)
 
-exampleContext :: ScriptContext
-exampleContext = mkScriptContext 100
+_exampleContext :: ScriptContext
+_exampleContext = _mkScriptContext 100
 
 exampleRedeemers :: Map.Map ScriptPurpose Redeemer
 exampleRedeemers = Map.unsafeFromList $ fmap (\x -> (mkScriptPurpose x, mkRedeemer x)) [1..100]

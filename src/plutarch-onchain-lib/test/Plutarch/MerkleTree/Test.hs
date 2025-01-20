@@ -6,51 +6,36 @@ module Plutarch.MerkleTree.Test(
   tests
 ) where
 
-import           Cardano.Crypto.DSIGN.Class           (deriveVerKeyDSIGN,
-                                                       rawDeserialiseSignKeyDSIGN,
-                                                       rawSerialiseSigDSIGN,
-                                                       rawSerialiseVerKeyDSIGN,
-                                                       signDSIGN)
-import           Cardano.Crypto.DSIGN.EcdsaSecp256k1  (EcdsaSecp256k1DSIGN,
-                                                       toMessageHash)
-import           Data.ByteString                      (ByteString)
-import qualified Data.ByteString                      as BS
-import           Numeric                              (readHex)
-import           Plutarch.Prelude
-import           Plutarch.Core.Crypto                 (pcompressPublicKey,
-                                                       pethereumPubKeyToPubKeyHash)
-import           Plutarch.Core.Eval                   (toBuiltinHexString)
-import           Plutarch.Core.Utils                  (pand'List,
-                                                       pintToByteString)
-import           Plutarch.Builtin.Crypto              (pblake2b_256,
-                                                       pverifyEcdsaSecp256k1Signature)
-import           Plutarch.MerkleTree.Helpers          (pcombine, pnibble,
-                                                       pnibbles, psuffix)
-import           Plutarch.MerkleTree.Merkling         (pmerkle_4, pnull_hash,
-                                                       pnull_hash_2,
-                                                       pnull_hash_4,
-                                                       pnull_hash_8)
-import           Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
-                                                       PMerklePatriciaForestry (..),
-                                                       PProof (..),
-                                                       PProofStep (..),
-                                                       ProofStep (..), pdelete,
-                                                       pfrom_root, phas,
-                                                       pinsert, pupdate)
-import Plutarch.LedgerApi.V3 (PAddress)                                                       
-import qualified Plutarch.Monadic                     as P
-import           Plutarch.Prelude
-import qualified PlutusCore.Crypto.Hash               as Hash
-import           PlutusLedgerApi.V2                   (Address (..),
-                                                       Credential (..))
-import           Test.QuickCheck.Instances.ByteString ()
-import           Test.Tasty
-import           Test.Tasty.HUnit
-import qualified Test.Tasty.QuickCheck                as QC
-import           Test.Tasty.QuickCheck                (Arbitrary (..), Gen,
-                                                       Property, forAll,
-                                                       vectorOf)
+import Cardano.Crypto.DSIGN.Class (deriveVerKeyDSIGN,
+                                   rawDeserialiseSignKeyDSIGN,
+                                   rawSerialiseSigDSIGN,
+                                   rawSerialiseVerKeyDSIGN, signDSIGN)
+import Cardano.Crypto.DSIGN.EcdsaSecp256k1 (EcdsaSecp256k1DSIGN, toMessageHash)
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Numeric (readHex)
+import Plutarch.Builtin.Crypto (pblake2b_256, pverifyEcdsaSecp256k1Signature)
+import Plutarch.Core.Crypto (pcompressPublicKey, pethereumPubKeyToPubKeyHash)
+import Plutarch.Core.Eval (toBuiltinHexString)
+import Plutarch.Core.Utils (pand'List, pintToByteString)
+import Plutarch.LedgerApi.V3 (PAddress)
+import Plutarch.MerkleTree.Helpers (pcombine, pnibble, pnibbles, psuffix)
+import Plutarch.MerkleTree.Merkling (pmerkle_4, pnull_hash, pnull_hash_2,
+                                     pnull_hash_4, pnull_hash_8)
+import Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
+                                             PMerklePatriciaForestry (..),
+                                             PProof (..), PProofStep (..),
+                                             ProofStep (..), pdelete,
+                                             pfrom_root, phas, pinsert, pupdate)
+import Plutarch.Monadic qualified as P
+import Plutarch.Prelude
 import Plutarch.Test.Unit (testEval)
+import PlutusCore.Crypto.Hash qualified as Hash
+import PlutusLedgerApi.V2 (Address (..), Credential (..))
+import Test.QuickCheck.Instances.ByteString ()
+import Test.Tasty
+import Test.Tasty.QuickCheck (Arbitrary (..), Gen, Property, forAll, vectorOf)
+import Test.Tasty.QuickCheck qualified as QC
 
 tests :: TestTree
 tests = testGroup "Merkle tree"

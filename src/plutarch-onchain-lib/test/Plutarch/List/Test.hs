@@ -8,7 +8,7 @@ module Plutarch.List.Test(
 
 import Plutarch.Core.List
 import Plutarch.Prelude
-import Plutarch.Test.Unit (testEval, testEvalEqual, testEvalFail)
+import Plutarch.Test.Unit (testEvalEqual, testEvalFail)
 import Test.Tasty
 import Test.Tasty.HUnit
 
