@@ -62,6 +62,7 @@ library
     Plutarch.Core.Unroll
     Plutarch.Core.Utils
     Plutarch.Core.ValidationLogic
+    Plutarch.Core.Validators
     Plutarch.Core.Value
     Plutarch.Lib
     Plutarch.MerkleTree.Helpers

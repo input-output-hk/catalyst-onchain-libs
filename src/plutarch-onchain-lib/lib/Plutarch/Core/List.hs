@@ -24,7 +24,9 @@ module Plutarch.Core.List (
   ptails30,
   consAsData,
   pmkBuiltinList,
-  pfindWithRest
+  pfindWithRest,
+  psetBitInteger,
+  pcheckIndex,
 ) where
 
 import Data.List (foldl')
@@ -159,6 +161,22 @@ pcheckIndex = phoistAcyclic $ plam $ \tagBits index -> P.do
   pif (pmod # set_bit # shifted_bit #> pmod # tagBits # shifted_bit)
     set_bit
     perror
+
+psetBitInteger :: Term s (PInteger :--> PInteger :--> PInteger)
+psetBitInteger = phoistAcyclic $ plam $ \claimMask n -> P.do
+  -- Check for a negative index
+  pif (n #< 0)
+    (ptraceInfoError "hi")
+    $ P.do
+      -- Compute 2^n (the nth bit)
+      bit_n <- plet $ pow2_trick # n
+      -- Compute the masked bits up to and including the nth bit
+      bits0_n <- plet $ pmod # claimMask # (2 * bit_n)
+      -- If nth bit is not set, add it to the claimMask
+      pif (bits0_n #< bit_n)
+        (claimMask + bit_n)
+        -- Otherwise, throw an error
+        (ptraceInfoError "hi")
 
 -- | Efficiently compute 2^exponent using a trick that uses a lookup table.
 pow2_trick :: Term s (PInteger :--> PInteger)

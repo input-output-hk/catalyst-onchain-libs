@@ -98,6 +98,7 @@ main =
       , testGroup "Count Spend Scripts" countSpendBenches
       , testGroup "Elem At" elemAtBenches
       , testGroup "Unroll" unrollBench
+      , testGroup "Integer Bitmask" integerBitMaskBenches
       ]
 
 dropBenches :: [TestTree]
@@ -187,4 +188,16 @@ unrollBench =
   , bench "bounded-unroll count script inputs" (punrolledCountScriptInputs # pconstant @(PBuiltinList PTxInInfo) exampleTxInputs)
   , bench "no-unroll count script inputs" (pcountScriptInputs # pconstant @(PBuiltinList PTxInInfo) exampleTxInputs)
   , bench "unbounded-whole-unroll length" $ punrolledCountScriptInputsUnboundWhole # pconstant @(PBuiltinList PTxInInfo) exampleTxInputs
+  ]
+
+integerBitMaskBenches :: [TestTree]
+integerBitMaskBenches =
+  [ bench "pcheckIndex" $
+      let c1 = pcheckIndex # 0 # 10
+          c2 = pcheckIndex # c1 # 9
+       in pcheckIndex # c2 # 8
+  , bench "psetBitInteger" $
+      let c1 = psetBitInteger # 0 # 10
+          c2 = psetBitInteger # c1 # 9
+       in psetBitInteger # c2 # 8
   ]
