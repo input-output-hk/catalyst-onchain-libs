@@ -2537,17 +2537,17 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1736188392,
-        "narHash": "sha256-n+L9BM4nb0KtmBme5fSBzjB1s0AYMwB383Kz6UbEXEY=",
+        "lastModified": 1737578147,
+        "narHash": "sha256-zQ0qv9e3Gy6Myn8wx+geJtCL5L2qJlpruSbWmrgyLOE=",
         "owner": "Plutonomicon",
         "repo": "plutarch-plutus",
-        "rev": "0a548108f9d83e4830a1a3ae1e58e61856c1bc42",
+        "rev": "8cc0a4ca3ed494a79fe019c72173b369cd26cb84",
         "type": "github"
       },
       "original": {
         "owner": "Plutonomicon",
         "repo": "plutarch-plutus",
-        "rev": "0a548108f9d83e4830a1a3ae1e58e61856c1bc42",
+        "rev": "8cc0a4ca3ed494a79fe019c72173b369cd26cb84",
         "type": "github"
       }
     },
