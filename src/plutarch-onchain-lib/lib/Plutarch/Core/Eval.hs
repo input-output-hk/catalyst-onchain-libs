@@ -9,8 +9,6 @@ Stability   : experimental
 module Plutarch.Core.Eval(
   evalT,
   evalWithArgsT,
-  psucceeds,
-  passert,
   ptraces,
   toHexString,
   toBuiltinHexString,
@@ -20,6 +18,7 @@ module Plutarch.Core.Eval(
   writePlutusScriptTraceBind,
   writePlutusScriptTrace,
   writePlutusScriptNoTrace,
+  calcBudgetNoTraces,
   ) where
 
 import qualified Cardano.Binary              as CBOR
@@ -36,9 +35,7 @@ import qualified Data.Text                   as T
 import qualified Data.Text.Encoding          as Text
 import qualified Data.Text.IO
 import           Data.Word                   (Word8)
-import           Plutarch                    (Config (..), LogLevel (..),
-                                              TracingMode (..), compile,
-                                              prettyScript, printScript)
+import           Plutarch.Pretty             (prettyScript)                                            
 import           Plutarch.Evaluate           (applyArguments, evalScript,
                                               evalScriptHuge)
 import           Plutarch.Prelude
@@ -49,8 +46,8 @@ import qualified PlutusTx.Prelude            as P
 import           Prettyprinter               (defaultLayoutOptions,
                                               layoutPretty)
 import           Prettyprinter.Render.String (renderString)
-import           Test.Tasty.HUnit            (Assertion, HasCallStack,
-                                              assertEqual, assertFailure)
+import           Test.Tasty.HUnit            (HasCallStack)
+import          Plutarch.Internal.Term       (Config(..), TracingMode(..), LogLevel (..), compile)
 
 encodeSerialiseCBOR :: Script -> Text
 encodeSerialiseCBOR = Text.decodeUtf8 . Base16.encode . CBOR.serialize' . serialiseScript
@@ -64,6 +61,15 @@ evalWithArgsT cfg x args = do
   let (escr, budg, trc) = evalScript $ applyArguments cmp args
   scr <- first (pack . show) escr
   pure (scr, budg, trc)
+
+calcBudgetNoTraces :: ClosedTerm a -> [Data] -> ExBudget
+calcBudgetNoTraces x args =
+  let cmp = compile NoTracing x
+  in  case cmp of 
+        Left e -> error $ "Failed to compile term: " <> show e
+        Right scr -> 
+          let (_, budg, _) = evalScript $ applyArguments scr args
+          in budg 
 
 writePlutusScript :: Config -> String -> FilePath -> ClosedTerm a -> IO ()
 writePlutusScript cfg title filepath term = do
@@ -88,41 +94,13 @@ writePlutusScriptNoTrace = writePlutusScript NoTracing
 comp :: ClosedTerm a -> Script
 comp t = either (error . unpack) id $ compile (Tracing LogInfo DoTracing) t
 
--- | Asserts the term evaluates successfully without failing
-psucceeds :: ClosedTerm a -> Assertion
-psucceeds p =
-  case evalScriptHuge $ comp p of
-    (Left _, _, trc) -> assertFailure ("Term failed to evaluate: " ++ show trc)
-    (Right _, _, _)  -> pure ()
-
-pscriptShouldBe :: Script -> Script -> Assertion
-pscriptShouldBe x y =
-  assertEqual "pscriptShouldBe" (printScript x) (printScript y)
-
-pshouldBe :: ClosedTerm a -> ClosedTerm b -> Assertion
-pshouldBe x y = do
-  p1 <- eval $ comp x
-  p2 <- eval $ comp y
-  pscriptShouldBe p1 p2
-  where
-    eval s = case evalScriptHuge s of
-      (Left e, _, _)   -> assertFailure $ "Script evaluation failed: " <> show e
-      (Right x', _, _) -> pure x'
-
-(#@?=) :: ClosedTerm a -> ClosedTerm b -> Assertion
-(#@?=) = pshouldBe
-
--- | Asserts the term to be true
-passert :: ClosedTerm a -> Assertion
-passert p = p #@?= pconstant True
-
 -- | Asserts that the term evaluates successfully with the given trace sequence
-ptraces :: ClosedTerm a -> [Text] -> Assertion
-ptraces p develTraces =
-  case evalScript $ comp p of
-    (Left _, _, _) -> assertFailure "Term failed to evaluate"
+ptraces :: ClosedTerm a -> [Text]
+ptraces p =
+  case evalScriptHuge $ comp p of
+    (Left _, _, _) -> error "Term failed to evaluate"
     (Right _, _, traceLog) ->
-      assertEqual "ptraces: does not match expected" traceLog develTraces
+      traceLog
 
 
 toBuiltinHexString :: String -> BuiltinByteString

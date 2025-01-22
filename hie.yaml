@@ -1,0 +1,17 @@
+cradle:
+  multi:
+    - path: "./dist-newstyle"
+      config:
+        cradle:
+          none:
+    - path: ""
+      config:
+        cradle:
+          cabal:
+            - path: "./"
+              component: "plutarch-onchain-lib:plutarch-onchain-lib"
+plugins:
+  eval:
+    globalOn: true
+  semanticTokens:
+    globalOn: true

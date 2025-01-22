@@ -4,9 +4,8 @@ module Plutarch.Core.Scripts(
   tryCompileNoTracing
   ) where
 
-import           Plutarch        (ClosedTerm, Config (..), LogLevel (LogInfo),
-                                  TracingMode (DoTracingAndBinds), compile)
-import           Plutarch.Script (Script)
+import Plutarch.Internal.Term (ClosedTerm, Config (..), LogLevel (LogInfo),
+                               Script, TracingMode (DoTracingAndBinds), compile)
 
 tryCompile :: Config -> ClosedTerm a -> Script
 tryCompile cfg x = case compile cfg x of
@@ -18,8 +17,3 @@ tryCompileTracingAndBinds = tryCompile (Tracing LogInfo DoTracingAndBinds)
 
 tryCompileNoTracing :: ClosedTerm a -> Script
 tryCompileNoTracing = tryCompile NoTracing
-
-
-
-
-

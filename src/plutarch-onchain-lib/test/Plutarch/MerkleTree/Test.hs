@@ -6,80 +6,56 @@ module Plutarch.MerkleTree.Test(
   tests
 ) where
 
-import           Cardano.Crypto.DSIGN.Class           (deriveVerKeyDSIGN,
-                                                       rawDeserialiseSignKeyDSIGN,
-                                                       rawSerialiseSigDSIGN,
-                                                       rawSerialiseVerKeyDSIGN,
-                                                       signDSIGN)
-import           Cardano.Crypto.DSIGN.EcdsaSecp256k1  (EcdsaSecp256k1DSIGN,
-                                                       toMessageHash)
-import           Data.ByteString                      (ByteString)
-import qualified Data.ByteString                      as BS
-import           Numeric                              (readHex)
-import           Plutarch.Builtin                     (pforgetData,
-                                                       pserialiseData)
-import           Plutarch.Core.Crypto                 (pcompressPublicKey,
-                                                       pethereumPubKeyToPubKeyHash)
-import           Plutarch.Core.Eval                   (passert,
-                                                       toBuiltinHexString)
-import           Plutarch.Core.Utils                  (pand'List,
-                                                       pintToByteString)
-import           Plutarch.Crypto                      (pblake2b_256,
-                                                       pverifyEcdsaSecp256k1Signature)
-import           Plutarch.MerkleTree.Helpers          (pcombine, pnibble,
-                                                       pnibbles, psuffix)
-import           Plutarch.MerkleTree.Merkling         (pmerkle_4, pnull_hash,
-                                                       pnull_hash_2,
-                                                       pnull_hash_4,
-                                                       pnull_hash_8)
-import           Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
-                                                       PMerklePatriciaForestry (..),
-                                                       PProof (..),
-                                                       PProofStep (..),
-                                                       ProofStep (..), pdelete,
-                                                       pfrom_root, phas,
-                                                       pinsert, pupdate)
-import qualified Plutarch.Monadic                     as P
-import           Plutarch.Prelude
-import qualified PlutusCore.Crypto.Hash               as Hash
-import           PlutusLedgerApi.V2                   (Address (..),
-                                                       Credential (..))
-import           Test.QuickCheck.Instances.ByteString ()
-import           Test.Tasty
-import           Test.Tasty.HUnit
-import qualified Test.Tasty.QuickCheck                as QC
-import           Test.Tasty.QuickCheck                (Arbitrary (..), Gen,
-                                                       Property, forAll,
-                                                       vectorOf)
+import Cardano.Crypto.DSIGN.Class (deriveVerKeyDSIGN,
+                                   rawDeserialiseSignKeyDSIGN,
+                                   rawSerialiseSigDSIGN,
+                                   rawSerialiseVerKeyDSIGN, signDSIGN)
+import Cardano.Crypto.DSIGN.EcdsaSecp256k1 (EcdsaSecp256k1DSIGN, toMessageHash)
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Numeric (readHex)
+import Plutarch.Builtin.Crypto (pblake2b_256, pverifyEcdsaSecp256k1Signature)
+import Plutarch.Core.Crypto (pcompressPublicKey, pethereumPubKeyToPubKeyHash)
+import Plutarch.Core.Eval (toBuiltinHexString)
+import Plutarch.Core.Utils (pand'List, pintToByteString)
+import Plutarch.LedgerApi.V3 (PAddress)
+import Plutarch.MerkleTree.Helpers (pcombine, pnibble, pnibbles, psuffix)
+import Plutarch.MerkleTree.Merkling (pmerkle_4, pnull_hash, pnull_hash_2,
+                                     pnull_hash_4, pnull_hash_8)
+import Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
+                                             PMerklePatriciaForestry (..),
+                                             PProof (..), PProofStep (..),
+                                             ProofStep (..), pdelete,
+                                             pfrom_root, phas, pinsert, pupdate)
+import Plutarch.Monadic qualified as P
+import Plutarch.Prelude
+import Plutarch.Test.Unit (testEval)
+import PlutusCore.Crypto.Hash qualified as Hash
+import PlutusLedgerApi.V2 (Address (..), Credential (..))
+import Test.QuickCheck.Instances.ByteString ()
+import Test.Tasty
+import Test.Tasty.QuickCheck (Arbitrary (..), Gen, Property, forAll, vectorOf)
+import Test.Tasty.QuickCheck qualified as QC
 
 tests :: TestTree
 tests = testGroup "Merkle tree"
   [ testGroup "Merkle Patricia Forestry Tests"
-    [ testCase "Verify Bitcoin Block 845999" $
-        passert test_verify_bitcoin_block_845999
-    , testCase "Insert Bitcoin Block 845602" $
-        passert test_insert_bitcoin_block_845602
-    , testCase "Has Kumquat" $
-        passert example_kumquat
-    , testCase "Example has" $
-        passert example_has
-    , testCase "Example Insert" $
-        passert example_insert
-    , testCase "Example Delete" $
-        passert example_delete
-    , testCase "Example Update" $
-        passert example_update
-    , testCase "Example Claim Proof" $
-        passert test_prove_eth_allocation
-    , testCase "Example E2E Claim" $
-        passert test_prove_eth_claim
+    [ testEval "Verify Bitcoin Block 845999" test_verify_bitcoin_block_845999
+    , testEval "Insert Bitcoin Block 845602" test_insert_bitcoin_block_845602
+    , testEval "Has Kumquat" example_kumquat
+    , testEval "Example has" example_has
+    , testEval "Example Insert" example_insert
+    , testEval "Example Delete" example_delete
+    , testEval "Example Update" example_update
+    , testEval "Example Claim Proof" test_prove_eth_allocation
+    , testEval "Example E2E Claim" test_prove_eth_claim
     ]
   , testGroup "Merkle tests" [
       QC.testProperty "merkle_4 property" merkle_4_test,
-      testCase "nibble examples" $ passert examplesNibble,
-      testCase "nibbles examples" $ passert examplesNibbles,
-      testCase "suffix examples" $ passert examplesSuffix,
-      testCase "combine null hashes" $ passert combineNullHash
+      testEval "nibble examples" examplesNibble,
+      testEval "nibbles examples" examplesNibbles,
+      testEval "suffix examples" examplesSuffix,
+      testEval "combine null hashes" combineNullHash
     ]
   ]
 
@@ -234,7 +210,7 @@ test_prove_eth_claim =
       eth_pkh = pethereumPubKeyToPubKeyHash # eth_pub_key
       eth_compressed_pub_key = pcompressPublicKey eth_pub_key
       claim_amnt = pintToByteString # 647891972327914048
-      claimAddress = pforgetData (pconstantData (Address (PubKeyCredential "deadbeef") Nothing))
+      claimAddress = pforgetData (pconstant @(PAsData PAddress) (Address (PubKeyCredential "deadbeef") Nothing))
       msgO = pblake2b_256 #$ pserialiseData # claimAddress
    in
       pand'List
@@ -250,7 +226,7 @@ test_prove_eth_claim =
 
     msg :: BS.ByteString
     msg =
-      let saddr = plift $ pserialiseData # pforgetData (pconstantData (Address (PubKeyCredential "deadbeef") Nothing))
+      let saddr = plift $ pserialiseData # pforgetData (pconstant @(PAsData PAddress) (Address (PubKeyCredential "deadbeef") Nothing))
       in Hash.blake2b_256 saddr
 
     msgSig :: ClosedTerm PByteString

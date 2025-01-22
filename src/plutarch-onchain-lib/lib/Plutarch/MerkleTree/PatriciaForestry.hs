@@ -1,10 +1,15 @@
-{-# LANGUAGE OverloadedRecordDot   #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE AllowAmbiguousTypes     #-}
+{-# LANGUAGE FlexibleInstances       #-}
+{-# LANGUAGE OverloadedRecordDot     #-}
+{-# LANGUAGE OverloadedStrings       #-}
+{-# LANGUAGE PartialTypeSignatures   #-}
+{-# LANGUAGE TemplateHaskell         #-}
+{-# LANGUAGE UndecidableInstances    #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 {-# OPTIONS_GHC -Wno-partial-fields #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 {-|
 Module      : Plutarch.MerkleTree.PatriciaForestry
 Description : Merkle trees in Plutarch
@@ -37,16 +42,16 @@ module Plutarch.MerkleTree.PatriciaForestry(
   pdo_fork
 ) where
 
-import           Plutarch.Crypto              (pblake2b_256)
-import           Plutarch.DataRepr
-import           Plutarch.Lift
-import           Plutarch.MerkleTree.Helpers  (pcombine, pnibble, pnibbles,
-                                               psuffix)
-import           Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash,
-                                               psparse_merkle_16)
-import           Plutarch.Prelude
-import           PlutusLedgerApi.V2           (BuiltinByteString)
-import qualified PlutusTx
+import GHC.Generics (Generic)
+import Plutarch.Builtin.Crypto (pblake2b_256)
+import Plutarch.Core.Internal.Builtins (pconsBS')
+import Plutarch.DataRepr
+import Plutarch.Internal.Lift
+import Plutarch.MerkleTree.Helpers (pcombine, pnibble, pnibbles, psuffix)
+import Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash, psparse_merkle_16)
+import Plutarch.Prelude
+import PlutusTx qualified
+import PlutusTx.Builtins.Internal (BuiltinByteString (BuiltinByteString))
 
 -- Constants
 
@@ -66,13 +71,32 @@ newtype PMerklePatriciaForestry (s :: S) = PMerklePatriciaForestry (Term s PByte
 
 instance DerivePlutusType PMerklePatriciaForestry where type DPTStrat _ = PlutusTypeNewtype
 
-deriving via
-  (DerivePConstantViaBuiltin MerklePatriciaForestry PMerklePatriciaForestry PByteString)
-  instance
-    PConstantDecl MerklePatriciaForestry
+-- TODO:
+-- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
+-- instance
+--   PLiftable PMerklePatriciaForestry
+--   where
+--   type AsHaskell PMerklePatriciaForestry = BuiltinByteString
+--   type PlutusRepr PMerklePatriciaForestry = PLiftedClosed PMerklePatriciaForestry
 
-instance PUnsafeLiftDecl PMerklePatriciaForestry where
-  type PLifted PMerklePatriciaForestry = MerklePatriciaForestry
+instance {-# OVERLAPPING #-} PLiftable PMerklePatriciaForestry where
+  type AsHaskell PMerklePatriciaForestry = AsHaskell PByteString
+  type PlutusRepr PMerklePatriciaForestry = PlutusTx.Data
+  {-# INLINEABLE toPlutarchRepr #-}
+  toPlutarchRepr = PlutusTx.toData . BuiltinByteString
+  {-# INLINEABLE toPlutarch #-}
+  toPlutarch = toPlutarchUni
+  {-# INLINEABLE fromPlutarchRepr #-}
+  fromPlutarchRepr x = (\(BuiltinByteString str) -> str) <$> PlutusTx.fromData x
+  {-# INLINEABLE fromPlutarch #-}
+  fromPlutarch = fromPlutarchUni
+
+-- TODO:
+-- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
+-- deriving via
+--   DeriveDataPLiftable PMerklePatriciaForestry MerklePatriciaForestry
+--   instance
+--     PLiftable PMerklePatriciaForestry
 
 pfrom_root :: Term s (PByteString :--> PMerklePatriciaForestry)
 pfrom_root = phoistAcyclic $ plam $ \root_ ->
@@ -118,37 +142,33 @@ data PProofStep (s :: S)
   | PFork (Term s (PDataRecord '["skip" ':= PInteger, "neighbor" ':= PNeighbor]))
   | PLeaf (Term s (PDataRecord '["skip" ':= PInteger, "key" ':= PByteString, "value" ':= PByteString]))
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PIsData, PEq, PShow)
+  deriving anyclass (PlutusType, PIsData)
 
 instance DerivePlutusType PProofStep where type DPTStrat _ = PlutusTypeData
-instance PUnsafeLiftDecl PProofStep where
-  type PLifted PProofStep = ProofStep
 
 deriving via
-  (DerivePConstantViaData ProofStep PProofStep)
+  DeriveDataPLiftable PProofStep ProofStep
   instance
-    PConstantDecl ProofStep
+    PLiftable PProofStep
 
 
 newtype PProof (s :: S) = PProof (Term s (PBuiltinList PProofStep))
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PIsData, PEq, PShow)
+  deriving anyclass (PlutusType, PIsData)
 
 instance DerivePlutusType PProof where type DPTStrat _ = PlutusTypeNewtype
 
 newtype PNeighbor (s :: S) = PNeighbor
   (Term s (PDataRecord '["nibble" ':= PInteger, "prefix" ':= PByteString, "root" ':= PByteString]))
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PDataFields, PIsData, PEq, PShow)
+  deriving anyclass (PlutusType, PDataFields, PIsData)
 
 instance DerivePlutusType PNeighbor where type DPTStrat _ = PlutusTypeData
-instance PUnsafeLiftDecl PNeighbor where
-  type PLifted PNeighbor = Neighbor
 
 deriving via
-  (DerivePConstantViaData Neighbor PNeighbor)
+  DeriveDataPLiftable PNeighbor Neighbor
   instance
-    PConstantDecl Neighbor
+    PLiftable PNeighbor
 
 -- Test whether an element is present in the trie with a specific value. This
 -- requires a Proof of inclusion for the element. The latter can be
@@ -209,7 +229,7 @@ pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
                   pmatch xs $ \case
                     PNil ->
                       pletFields @'["prefix", "nibble", "root"] forkF.neighbor $ \neighborF ->
-                        let prefix_ = pconsBS # neighborF.nibble # neighborF.prefix
+                        let prefix_ = pconsBS' # neighborF.nibble # neighborF.prefix
                         in pcombine # prefix_ # neighborF.root
                     PCons _ _ ->
                       plet (cursor + 1 + forkF.skip) $ \nextCursor ->
