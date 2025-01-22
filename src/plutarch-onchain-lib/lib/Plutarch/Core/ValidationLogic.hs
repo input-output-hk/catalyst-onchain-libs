@@ -9,6 +9,7 @@ module Plutarch.Core.ValidationLogic (
   , pvalueFromCred
   , pvalueToCred
   , pemptyLedgerValue
+  , pinputsFromCredential
 ) where
 
 import Plutarch.Core.List (pdropFast)
@@ -65,6 +66,7 @@ pcountSpendRedeemers rdmrs =
                 n
      in go # 0 # pto rdmrs
 
+-- | Count the number of script inputs in the transaction inputs list.
 pcountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
 pcountScriptInputs =
   phoistAcyclic $
@@ -80,6 +82,7 @@ pcountScriptInputs =
                 n
      in go # 0
 
+-- | Count the number of transaction inputs from the provided credential.
 pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 pcountInputsFromCred =
   phoistAcyclic $ plam $ \cred txIns ->
@@ -98,6 +101,7 @@ emptyValue = mempty
 pemptyLedgerValue :: ClosedTerm (PValue 'Sorted 'Positive)
 pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
 
+-- | Return the total value spent by all the transaction inputs that are from the provided credential.
 pvalueFromCred :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PValue 'Sorted 'Positive)
 pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
   (pfix #$ plam $ \self acc ->
@@ -116,6 +120,7 @@ pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
   # pemptyLedgerValue
   # inputs
 
+-- | Return the total value produced by all the transaction outputs that are to the provided credential.
 pvalueToCred :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxOut) :--> PValue 'Sorted 'Positive)
 pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
   let value = (pfix #$ plam $ \self acc ->
@@ -135,6 +140,19 @@ pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
               # pemptyLedgerValue
               # inputs
   in value
+
+-- | Return the transaction inputs that are from the provided credential.
+pinputsFromCredential :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PList PTxOut)
+pinputsFromCredential = phoistAcyclic $ plam $ \cred txIns ->
+  let go = pfix #$ plam $ \self acc ->
+            pelimList
+              (\x xs ->
+                  plet (pfield @"resolved" # pfromData x) $ \txInOut->
+                    let inputCred = pfield @"credential" # (pfield @"address" # txInOut)
+                    in pif (cred #== inputCred) (self # (pcons # txInOut # acc) # xs) (self # acc # xs)
+              )
+              acc
+   in go # pnil @PList # txIns
 
 -- | Strictly evaluates a list of boolean expressions.
 -- If all the expressions evaluate to true, returns unit, otherwise throws an error.

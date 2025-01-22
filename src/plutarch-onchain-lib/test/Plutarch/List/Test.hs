@@ -10,18 +10,17 @@ import Plutarch.Core.List
 import Plutarch.Prelude
 import Plutarch.Test.Unit (testEvalEqual, testEvalFail)
 import Test.Tasty
-import Test.Tasty.HUnit
 
 exampleInts :: [Integer]
 exampleInts = [1..100]
 
-tenTails :: [Integer]
-tenTails = drop 10 exampleInts
+tepnTails :: [Integer]
+tepnTails = drop 10 exampleInts
 
 tests :: TestTree
 tests = testGroup "List Utilities"
   [ testGroup "Succeed / EvalEqual Tests"
-      [ testEvalEqual "ptails10" (ptails10 # pconstant @(PBuiltinList PInteger) [1..100]) (pconstant @(PBuiltinList PInteger) tenTails)
+      [ testEvalEqual "ptails10" (ptails10 # pconstant @(PBuiltinList PInteger) [1..100]) (pconstant @(PBuiltinList PInteger) tepnTails)
       , testEvalEqual "pheadSingleton" (pheadSingleton # pconstant @(PBuiltinList PInteger) [1]) (pconstant @PInteger 1)
       , testEvalEqual "pmustFind"
           (pmustFind # plam (#== 6) # pconstant @(PBuiltinList PInteger) [1..6])

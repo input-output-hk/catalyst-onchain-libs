@@ -48,7 +48,7 @@ tests = testGroup "Merkle tree"
     , testEval "Example Delete" example_delete
     , testEval "Example Update" example_update
     , testEval "Example Claim Proof" test_prove_eth_allocation
-    , testEval "Example E2E Claim" $ test_prove_eth_claim
+    , testEval "Example E2E Claim" test_prove_eth_claim
     ]
   , testGroup "Merkle tests" [
       QC.testProperty "merkle_4 property" merkle_4_test,

@@ -8,10 +8,12 @@ Stability   : experimental
 
 module Plutarch.Core.PByteString (
   pisPrefixOf
-, pisPrefixedWith) where
+, pisPrefixedWith
+, ptakeBS
+, pdropBS) where
 
+import Plutarch.LedgerApi.Value (PTokenName)
 import Plutarch.Prelude
-import Plutarch.LedgerApi.Value ( PTokenName )
 
 -- | Checks if a tokenName is prefixed by a certain ByteString
 pisPrefixedWith :: ClosedTerm (PTokenName :--> PByteString :--> PBool)
@@ -24,3 +26,13 @@ pisPrefixOf = plam $ \prefix src ->
   let prefixLength = plengthBS # prefix
       prefix' = psliceBS # 0 # prefixLength # src
    in prefix' #== prefix
+
+-- | Take the first n bytes of a ByteString
+ptakeBS :: Term s (PInteger :--> PByteString :--> PByteString)
+ptakeBS = phoistAcyclic $ plam $ \n bs ->
+  psliceBS # 0 # n # bs
+
+-- | Drop the first n bytes of a ByteString
+pdropBS :: Term s (PInteger :--> PByteString :--> PByteString)
+pdropBS = phoistAcyclic $ plam $ \n bs ->
+  psliceBS # n # (plengthBS # bs - n) # bs

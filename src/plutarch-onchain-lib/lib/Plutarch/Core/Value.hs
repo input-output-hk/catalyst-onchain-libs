@@ -26,15 +26,14 @@ module Plutarch.Core.Value (
   pvalueOfOneScott,
   pfirstTokenNameWithCS,
   pvalueOfOne,
-  psingletonOfCS,
   ptryLookupValue,
   pfilterCSFromValue,
   pvalueContains,
-  pfirstTokenName,
   pcountCS,
   pcountNonAdaCS,
   pstripAdaSafe,
   pstripAda,
+  ptrySingleTokenCS,
 ) where
 
 import GHC.Generics (Generic)
@@ -93,6 +92,9 @@ pfindCurrencySymbolsByTokenName = phoistAcyclic $
        in pmap # pfstBuiltin # hasTn
 
 -- | Checks if a Currency Symbol is held within a Value
+-- Arguments:
+--   the currency symbol (must be data-encoded) to check for.
+-- returns a boolean indicating whether the currency symbol is held within the value.
 phasDataCS ::
   forall
     (anyOrder :: KeyGuarantees)
@@ -103,6 +105,10 @@ phasDataCS = phoistAcyclic $
   plam $ \symbol value ->
     pany # plam (\tkPair -> (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
 
+-- | Checks if a Currency Symbol is held within a Value
+-- Arguments:
+--   the currency symbol (must not be data-encoded) to check for.
+-- returns a boolean indicating whether the currency symbol is held within the value.
 phasCS ::
   forall
     (anyOrder :: KeyGuarantees)
@@ -129,7 +135,9 @@ pcontainsCurrencySymbols = phoistAcyclic $
         containsCS = plam $ \cs -> pelem # cs # value
      in pall # containsCS # symbols
 
--- | Probably more effective than `plength . pflattenValue`
+-- | Count the total number of unique tokens in the provided value.
+-- This is useful for preventing the dust token attack without needing to be overly
+-- restrictive on the content of a value (ie. enforce the value must only contain tokens that are known by the protocol)
 pcountOfUniqueTokens ::
   forall
     (keys :: KeyGuarantees)
@@ -153,10 +161,10 @@ psubtractValue ::
 a `psubtractValue` b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMap.NonCommutative # plam (-) # a # b
 
 -- | Constructs a singleton `PValue` with the given currency symbol, token name, and amount.
---
--- @param currencySymbol The currency symbol of the token.
--- @param tokenName The name of the token.
--- @param amount The amount of the token.
+-- Argumenmts:
+--   The currency symbol of the token.
+--   The name of the token.
+--   The amount of the token.
 --
 -- @return A singleton `PValue` containing the specified currency symbol, token name, and amount.
 pvalueSingleton :: Term s (PAsData PCurrencySymbol) -> Term s (PAsData PTokenName) -> Term s (PAsData PInteger) -> Term s (PAsData (PValue 'Sorted 'Positive))
@@ -211,6 +219,7 @@ ponlyAsset = phoistAcyclic $
           plet (pheadSingleton # tokens) $ \tkPair ->
             pcon (PTriple (pfromData (pfstBuiltin # valuePair)) (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
 
+-- | Check that the provided value contains exactly one token of the given currency symbol.
 pvalueOfOneScott ::
   forall
     (keys :: KeyGuarantees)
@@ -237,6 +246,7 @@ pvalueOfOneScott = phoistAcyclic $
         (const (pconstant False))
         # pto val'
 
+-- | Extract the first token name of the given currency symbol.
 pfirstTokenNameWithCS ::
   forall
     (keys :: KeyGuarantees)
@@ -258,6 +268,9 @@ pfirstTokenNameWithCS = phoistAcyclic $
         (const perror)
         # pto val'
 
+-- | Check that a value contains exactly one token of a given currency symbol
+-- and no other tokens with that currency symbol.
+-- Errors if other tokens with the same currency symbol are present.
 pvalueOfOne ::
   forall
     (keys :: KeyGuarantees)
@@ -284,7 +297,9 @@ pvalueOfOne = phoistAcyclic $
         (const (pconstant False))
         # pto val'
 
-psingletonOfCS ::
+-- | Check that there is exactly one token name with the given currency symbol in the provided value
+-- return the token name and the quantity of the token.
+ptrySingleTokenCS ::
   forall
     (keys :: KeyGuarantees)
     (amounts :: AmountGuarantees)
@@ -293,9 +308,9 @@ psingletonOfCS ::
     s
     ( PAsData PCurrencySymbol
         :--> PValue keys amounts
-        :--> PPair PTokenName PInteger
+        :--> PBuiltinPair (PAsData PTokenName) (PAsData PInteger)
     )
-psingletonOfCS = phoistAcyclic $
+ptrySingleTokenCS = phoistAcyclic $
   plam $ \policyId val ->
     pmatch val $ \(PValue val') ->
       precList
@@ -303,8 +318,7 @@ psingletonOfCS = phoistAcyclic $
             pif
               (pfstBuiltin # x #== policyId)
               ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
-                  let tkPair = pheadSingleton # tokens
-                   in pcon (PPair (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
+                  pheadSingleton # tokens
               )
               (self # xs)
         )
@@ -384,6 +398,9 @@ pfilterCSFromValue = phoistAcyclic $
                 pelimList (\x xs -> pif (pfstBuiltin # x #== policyId) xs (pcons # x # (self # xs))) pnil ys
        in pcon (PValue $ pcon $ PMap $ go # mapVal)
 
+-- | Check if a value contains another value
+-- This function checks if the first value contains all the tokens of the second value
+-- and the quantities of the tokens in the first value are greater than or equal to the quantities of the tokens in the second value.
 pvalueContains ::
   ClosedTerm
     ( PValue 'Sorted 'Positive
@@ -440,19 +457,7 @@ pvalueContains = phoistAcyclic $
 --     tokensMap = pto innerVal
 --  in go # tokensMap # pto (pto subValue)
 
-pfirstTokenName ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PTokenName)
-pfirstTokenName = phoistAcyclic $
-  plam $ \val ->
-    pmatch val $ \(PValue val') ->
-      pmatch val' $ \(PMap csPairs) ->
-        pmatch (pfromData (psndBuiltin # (phead # csPairs))) $ \(PMap tokens) ->
-          pfromData $ pfstBuiltin # (phead # tokens)
-
+-- | Count the number of currency symbols in a value.
 pcountCS ::
   forall
     (keys :: KeyGuarantees)
@@ -465,6 +470,7 @@ pcountCS = phoistAcyclic $
       pmatch val' $ \(PMap csPairs) ->
         plength # csPairs
 
+-- | Count the number of non-Ada currency symbols in a value.
 pcountNonAdaCS ::
   forall
     (keys :: KeyGuarantees)

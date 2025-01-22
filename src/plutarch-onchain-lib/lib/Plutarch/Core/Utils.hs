@@ -43,7 +43,6 @@ module Plutarch.Core.Utils(
   ptryOwnInput,
   ptxSignedByPkh,
   (#-),
-  pfindWithRest,
   phasUTxO,
   pand'List,
   pcond,
@@ -57,32 +56,24 @@ module Plutarch.Core.Utils(
   pdivCeil,
   pisScriptCredential,
   pisPubKeyCredential,
+  pdeserializeCredential,
 ) where
 
-import qualified Data.Text                        as T
-import           Plutarch.Prelude                 
+import Data.Text qualified as T
+import Plutarch.Prelude
 
-import Plutarch.LedgerApi.V3
-    ( KeyGuarantees(Sorted),
-      PMaybeData,
-      PAddress,
-      PCredential(..),
-      PPubKeyHash,
-      PDatum,
-      PScriptHash,
-      PPosixTime(..),
-      POutputDatum(POutputDatum),
-      PTxOut,
-      PScriptInfo,
-      PTxInInfo,
-      PTxOutRef,
-      AmountGuarantees(Positive),
-      PValue(..) )            
-import qualified Plutarch.Monadic                 as P
-                                         
-import           Prelude
-import           Plutarch.Internal.Term ( PType ) 
+import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
+                              KeyGuarantees (Sorted), PAddress,
+                              PCredential (..), PDatum, PMaybeData,
+                              POutputDatum (POutputDatum), PPosixTime (..),
+                              PPubKeyHash, PScriptHash, PScriptInfo, PTxInInfo,
+                              PTxOut, PTxOutRef, PValue (..))
+import Plutarch.Monadic qualified as P
+
+import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.Value (pvalueContains)
+import Plutarch.Internal.Term (PType)
+import Prelude
 
 pfail ::
   forall (s :: S) a.
@@ -119,7 +110,6 @@ data PTxOutH (s :: S) =
 
 pisRewarding :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisRewarding term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
-
 
 ptryFromInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
 ptryFromInlineDatum = phoistAcyclic $
@@ -327,28 +317,6 @@ ptxSignedByPkh ::
   Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
 ptxSignedByPkh = pelem
 
-pfindWithRest ::
-  forall (list :: PType -> PType) (a :: PType).
-  PListLike list =>
-  PElemConstraint list a =>
-  ClosedTerm
-    ( (a :--> PBool)
-        :--> list a
-        :--> PPair a (list a)
-    )
-pfindWithRest = phoistAcyclic $
-  plam $ \f ys ->
-    let mcons self x xs =
-          pmatch (f # x) $ \case
-            PTrue -> P.do
-              acc <- plam
-              pcon $ PPair x (pconcat # acc # xs)
-            PFalse -> P.do
-              acc <- plam
-              self # xs #$ pcons # x # acc
-        mnil = const (ptraceInfoError "Find")
-     in precList mcons mnil # ys # pnil
-
 {- | @phasUTxO # oref # inputs@
   ensures that in @inputs@ there is an input having @TxOutRef@ @oref@ .
 -}
@@ -429,3 +397,18 @@ pisScriptCredential cred = (pfstBuiltin # (pasConstr # pforgetData cred)) #== 1
 
 pisPubKeyCredential :: Term s (PAsData PCredential) -> Term s PBool
 pisPubKeyCredential cred = (pfstBuiltin # (pasConstr # pforgetData cred)) #== 0
+
+-- | Check if the provided data-encoded term has the expected builtin data representation of a credential.
+pdeserializeCredential :: Term s (PAsData PCredential) -> Term s (PAsData PCredential)
+pdeserializeCredential term =
+  plet (pasConstr # pforgetData term) $ \constrPair ->
+    plet (pfstBuiltin # constrPair) $ \constrIdx ->
+      pif (plengthBS # (pasByteStr # (pheadSingleton # (psndBuiltin # constrPair))) #== 28)
+          (
+            pcond
+              [ ( constrIdx #== 0 , term)
+              , ( constrIdx #== 1 , term)
+              ]
+              (ptraceInfoError "Invalid credential")
+          )
+          perror

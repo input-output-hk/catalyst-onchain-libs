@@ -106,7 +106,6 @@ test-suite plutarch-onchain-lib-tests
     , plutus-ledger-api
     , quickcheck-instances
     , tasty
-    , tasty-hunit
     , tasty-quickcheck
 
 test-suite plutarch-onchain-lib-bench
