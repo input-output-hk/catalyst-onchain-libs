@@ -73,23 +73,12 @@ instance DerivePlutusType PMerklePatriciaForestry where type DPTStrat _ = Plutus
 
 -- TODO:
 -- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
--- instance
---   PLiftable PMerklePatriciaForestry
---   where
---   type AsHaskell PMerklePatriciaForestry = BuiltinByteString
---   type PlutusRepr PMerklePatriciaForestry = PLiftedClosed PMerklePatriciaForestry
+instance
+  PLiftable PMerklePatriciaForestry
+  where
+  type AsHaskell PMerklePatriciaForestry = BuiltinByteString
+  type PlutusRepr PMerklePatriciaForestry = PLiftedClosed PMerklePatriciaForestry
 
-instance {-# OVERLAPPING #-} PLiftable PMerklePatriciaForestry where
-  type AsHaskell PMerklePatriciaForestry = AsHaskell PByteString
-  type PlutusRepr PMerklePatriciaForestry = PlutusTx.Data
-  {-# INLINEABLE toPlutarchRepr #-}
-  toPlutarchRepr = PlutusTx.toData . BuiltinByteString
-  {-# INLINEABLE toPlutarch #-}
-  toPlutarch = toPlutarchUni
-  {-# INLINEABLE fromPlutarchRepr #-}
-  fromPlutarchRepr x = (\(BuiltinByteString str) -> str) <$> PlutusTx.fromData x
-  {-# INLINEABLE fromPlutarch #-}
-  fromPlutarch = fromPlutarchUni
 
 -- TODO:
 -- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.

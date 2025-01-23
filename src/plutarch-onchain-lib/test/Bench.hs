@@ -140,7 +140,7 @@ elemAtBenches =
   ]
 
 unrollLengthBound :: forall list a s. PIsListLike list a => Term s (list a :--> PInteger)
-unrollLengthBound = punrollBound 200 (const $ plam $ \_ -> pconstant (-1)) go 0
+unrollLengthBound = punrollBound' 200 (const $ plam $ \_ -> pconstant (-1)) go 0
   where
     go ::
       (Integer -> Term s (list a :--> PInteger)) ->
@@ -149,7 +149,7 @@ unrollLengthBound = punrollBound 200 (const $ plam $ \_ -> pconstant (-1)) go 0
     go self n = plam $ pelimList (\_ xs -> self (n + 1) # xs) (pconstant n)
 
 punrolledCountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
-punrolledCountScriptInputs = punrollBound 100 (const def) go () # 0
+punrolledCountScriptInputs = punrollBound' 100 (const def) go () # 0
   where
     def :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
     def = plam $ \_ _ -> -1
