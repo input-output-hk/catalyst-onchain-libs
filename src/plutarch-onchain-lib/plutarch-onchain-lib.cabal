@@ -99,7 +99,7 @@ test-suite plutarch-onchain-lib-tests
     , base
     , bytestring
     , cardano-crypto-class
-    , plutarch              ==1.9.0
+    , plutarch
     , plutarch-ledger-api
     , plutarch-onchain-lib
     , plutarch-testlib
@@ -116,7 +116,7 @@ test-suite plutarch-onchain-lib-bench
   hs-source-dirs: test
   build-depends:
     , base
-    , plutarch              ==1.9.0
+    , plutarch
     , plutarch-ledger-api
     , plutarch-onchain-lib
     , plutarch-testlib

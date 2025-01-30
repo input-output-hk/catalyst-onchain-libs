@@ -66,10 +66,9 @@ pfindCurrencySymbolsByTokenPrefix = phoistAcyclic $
     plet (pisPrefixOf # prefix) $ \prefixCheck ->
       let mapVal = pto (pto value)
           isPrefixed = pfilter # plam (\csPair ->
-            pany # plam (\tkPair ->
-              pmatch (pto (pfromData $ pfstBuiltin # tkPair)) $ \(PDataNewtype tkn) ->
-                  prefixCheck # pfromData tkn
-              ) # pto (pfromData (psndBuiltin # csPair))
+              pany # plam (\tkPair ->
+                prefixCheck # pto (pfromData $ pfstBuiltin # tkPair)
+                ) # pto (pfromData (psndBuiltin # csPair))
             ) # mapVal
        in pmap # pfstBuiltin # isPrefixed
 

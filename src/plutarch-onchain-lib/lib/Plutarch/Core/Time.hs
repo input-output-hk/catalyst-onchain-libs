@@ -8,16 +8,16 @@ module Plutarch.Core.Time (
   pvalidityRangeStart,
   pvalidityRangeEnd,
   ptoCustomFiniteRangeH,
-  pisFinite
+  pisFinite,
 ) where
 
 import GHC.Generics (Generic)
-import Plutarch.Core.Data (pnonew)
 import Plutarch.LedgerApi.V3 (PExtended (PFinite), PInterval (..),
                               PLowerBound (PLowerBound), PPosixTime (..),
-                              PUpperBound (PUpperBound))
+                              PUpperBound (PUpperBound), unPPosixTime)
 import Plutarch.Monadic qualified as P
 import Plutarch.Prelude
+import Plutarch.Unsafe (punsafeCoerce)
 
 type PPosixTimeRange = PInterval PPosixTime
 
@@ -37,50 +37,56 @@ instance DerivePlutusType PPosixFiniteRange where
 -- Errors if the provided time range is not finite.
 ptoFiniteRange :: Term s (PPosixTimeRange :-->  PPosixFiniteRange)
 ptoFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
-  timeRangeF <- pletFields @'["from", "to"] timeRange
-  PLowerBound lb <- pmatch timeRangeF.from
-  PFinite ((pfield @"_0" #) -> start) <- pmatch (pfield @"_0" # lb)
-  PUpperBound ub <- pmatch timeRangeF.to
-  PFinite ((pfield @"_0" #) -> end) <- pmatch (pfield @"_0" # ub)
-  pcon $ PPosixFiniteRange { from = start, to = end }
+  PInterval lowerBound upperBound <- pmatch timeRange
+  PLowerBound lb _ <- pmatch lowerBound
+  PFinite start <- pmatch lb
+  PUpperBound ub _ <- pmatch upperBound
+  PFinite end <- pmatch ub
+  pcon $ PPosixFiniteRange { from = pfromData start, to = pfromData end }
 
 -- | Get the start time of a 'PPosixTimeRange'.
 -- Errors if the start time is not finite.
 pvalidityRangeStart :: Term s (PPosixTimeRange :--> PAsData PInteger)
 pvalidityRangeStart = phoistAcyclic $ plam $ \timeRange -> P.do
-  PInterval ((pfield @"from" #) -> startTime) <- pmatch timeRange
-  PLowerBound lb <- pmatch startTime
-  PFinite ((pfield @"_0" #) -> posixTime) <- pmatch (pfield @"_0" # lb)
-  pmatch posixTime $ \(PPosixTime pt) -> pmatch pt $ \(PDataNewtype t) -> t
+  interval <- pmatch timeRange
+  let startTime = pinteral'from interval
+  --PInterval ((pfield @"from" #) -> startTime) <- pmatch timeRange
+  PLowerBound lb _ <- pmatch startTime
+  PFinite posixTime <- pmatch lb
+  punsafeCoerce $ pto posixTime
 
 -- | Get the end time of a 'PPosixTimeRange'.
 -- Errors if the end time is not finite.
 pvalidityRangeEnd :: Term s (PPosixTimeRange :--> PAsData PInteger)
 pvalidityRangeEnd = phoistAcyclic $ plam $ \timeRange -> P.do
-  PInterval ((pfield @"to" #) -> to_) <- pmatch timeRange
-  PUpperBound ub <- pmatch to_
-  PFinite ((pfield @"_0" #) -> posixTime) <- pmatch (pfield @"_0" # ub)
-  pmatch posixTime $ \(PPosixTime pt) -> pmatch pt $ \(PDataNewtype t) -> t
+  interval <- pmatch timeRange
+  let to_ = pinteral'to interval
+  PUpperBound ub _ <- pmatch to_
+  PFinite posixTime <- pmatch ub
+  punsafeCoerce $ pto posixTime
 
 -- | Extract the start and end times from a 'PPosixTimeRange' as Integers
 -- and return them as a pair via CPS.
 -- Errors if the start or end time is not finite.
 ptoCustomFiniteRangeH :: Term s PPosixTimeRange -> TermCont @r s (Term s PInteger, Term s PInteger)
 ptoCustomFiniteRangeH timeRange = do
-  timeRangeF <- pletFieldsC @'["from", "to"] timeRange
-  PLowerBound lb <- pmatchC timeRangeF.from
-  PFinite ((pfield @"_0" #) -> start) <- pmatchC (pfield @"_0" # lb)
-  PUpperBound ub <- pmatchC timeRangeF.to
-  PFinite ((pfield @"_0" #) -> end) <- pmatchC (pfield @"_0" # ub)
-  pure (pnonew $ pfromData start, pnonew $ pfromData end)
+  (PInterval from_ to_) <- pmatchC timeRange
+  PLowerBound lb _ <- pmatchC from_
+  PFinite (pfromData -> start) <- pmatchC lb
+  PUpperBound ub _ <- pmatchC to_
+  PFinite (pfromData -> end) <- pmatchC ub
+  pure (unPPosixTime start, unPPosixTime end)
 
 -- | Check if a 'PPosixTimeRange' is finite.
 pisFinite :: Term s (PInterval PPosixTime :--> PBool)
 pisFinite = plam $ \i ->
-  let isFiniteFrom = pmatch (pfield @"_0" # (pfield @"from" # i)) $ \case
-        PFinite _ -> pconstant True
-        _ -> pconstant False
-      isFiniteTo = pmatch (pfield @"_0" # (pfield @"to" # i)) $ \case
-        PFinite _ -> pconstant True
-        _ -> pconstant False
-   in pand' # isFiniteFrom # isFiniteTo
+  pmatch i $ \(PInterval start' end') ->
+    pmatch start' $ \(PLowerBound start _) ->
+      pmatch end' $ \(PUpperBound end _) ->
+        let isFiniteFrom = pmatch start $ \case
+              PFinite _ -> pconstant True
+              _ -> pconstant False
+            isFiniteTo = pmatch end $ \case
+              PFinite _ -> pconstant True
+              _ -> pconstant False
+        in pand' # isFiniteFrom # isFiniteTo

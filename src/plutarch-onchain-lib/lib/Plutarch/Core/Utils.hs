@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP                  #-}
+{-# LANGUAGE NamedFieldPuns       #-}
 {-# LANGUAGE OverloadedRecordDot  #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PolyKinds            #-}
@@ -21,8 +22,6 @@ module Plutarch.Core.Utils(
   pisRewarding,
   ptryFromInlineDatum,
   pfromPDatum,
-  pnonew,
-  punnew,
   ppair,
   passert,
   pcheck,
@@ -51,8 +50,6 @@ module Plutarch.Core.Utils(
   (#/=),
   pmapAndConvertList,
   pintToByteString,
-  punwrapPosixTime,
-  pwrapPosixTime,
   pdivCeil,
   pisScriptCredential,
   pisPubKeyCredential,
@@ -62,12 +59,7 @@ module Plutarch.Core.Utils(
 import Data.Text qualified as T
 import Plutarch.Prelude
 
-import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
-                              KeyGuarantees (Sorted), PAddress,
-                              PCredential (..), PDatum, PMaybeData,
-                              POutputDatum (POutputDatum), PPosixTime (..),
-                              PPubKeyHash, PScriptHash, PScriptInfo, PTxInInfo,
-                              PTxOut, PTxOutRef, PValue (..))
+import Plutarch.LedgerApi.V3
 import Plutarch.Monadic qualified as P
 
 import Plutarch.Core.List (pheadSingleton)
@@ -129,22 +121,6 @@ pfromPDatum ::
   PTryFrom PData a =>
   Term s (PDatum :--> a)
 pfromPDatum = phoistAcyclic $ plam $ flip ptryFrom fst . pto
-
--- Extract the inner type from a type which contains a `DataNewtype`
--- ex. PPosixTime -> PInteger
---     PPubKeyHash -> PByteString
-pnonew :: forall {a :: PType} {b :: PType} {s :: S}.
-                ((PInner a :: PType) ~ (PDataNewtype b :: PType), PIsData b) =>
-                Term s a -> Term s b
-pnonew nt = pmatch (pto nt) $ \(PDataNewtype bs) -> pfromData bs
-
--- Extract the inner type from a `PDataNewType`
--- ex. PDataNewtype PInteger -> PInteger
---     PDataNewtype PByteString -> PByteString
-punnew :: forall {b :: PType} {s :: S}.
-                PIsData b =>
-                Term s (PDataNewtype b) -> Term s b
-punnew nt = pmatch nt $ \(PDataNewtype bs) -> pfromData bs
 
 ppair :: Term s a -> Term s b -> Term s (PPair a b)
 ppair a b = pcon (PPair a b)
@@ -292,16 +268,19 @@ ptryOutputToAddress = phoistAcyclic $
     )
       # outs
 
-ptryOwnOutput :: Term s (PBuiltinList (PAsData PTxOut) :--> PScriptHash :--> PTxOut)
+ptryOwnOutput :: Term s (PBuiltinList (PAsData PTxOut) :--> PAsData PScriptHash :--> PTxOut)
 ptryOwnOutput = phoistAcyclic $
   plam $ \outs target ->
     ( pfix #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
-              pmatch (pfield @"credential" # (pfield @"address" # txo)) $ \case
-                PPubKeyCredential _ -> (self # txos)
-                PScriptCredential ((pfield @"_0" #) -> vh) ->
-                  pif (target #== vh) (pfromData txo) (self # txos)
+              pmatch (pfromData txo) $ \case
+                PTxOut {ptxOut'address} ->
+                  pmatch ptxOut'address $ \addr ->
+                    pmatch (paddress'credential addr) $ \case
+                      PScriptCredential vh ->
+                        pif (target #== vh) txo (self # txos)
+                      PPubKeyCredential _ -> (self # txos)
           )
           perror
           xs
@@ -311,7 +290,10 @@ ptryOwnOutput = phoistAcyclic $
 ptryOwnInput :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PTxOutRef :--> PTxOut)
 ptryOwnInput = phoistAcyclic $
   plam $ \inputs ownRef ->
-    precList (\self x xs -> pletFields @'["outRef", "resolved"] x $ \txInFields -> pif (ownRef #== txInFields.outRef) txInFields.resolved (self # xs)) (const perror) # inputs
+    precList (\self x xs ->
+      pmatch (pfromData x) $ \(PTxInInfo {ptxInInfo'outRef, ptxInInfo'resolved}) ->
+          pif (ownRef #== ptxInInfo'outRef) ptxInInfo'resolved (self # xs)
+      ) (const perror) # inputs
 
 ptxSignedByPkh ::
   Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
@@ -322,13 +304,16 @@ ptxSignedByPkh = pelem
 -}
 phasUTxO ::
   ClosedTerm
-    ( PAsData PTxOutRef
+    ( PTxOutRef
         :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
     )
 phasUTxO = phoistAcyclic $
   plam $ \oref inInputs ->
-    pany @PBuiltinList # plam (\input -> oref #== (pfield @"outRef" # input)) # inInputs
+    pany @PBuiltinList # plam (\input ->
+      pmatch (pfromData input) $ \ininfo ->
+        oref #== ptxInInfo'outRef ininfo
+      ) # inInputs
 
 pand'List :: [Term s PBool] -> Term s PBool
 pand'List ts' =
@@ -380,12 +365,6 @@ pshowDigit = phoistAcyclic $
       , (digit #== 9, pconstant "9")
       ]
       perror
-
-punwrapPosixTime :: Term s (PAsData PPosixTime) -> Term s PInteger
-punwrapPosixTime pt = pmatch (pfromData pt) $ \(PPosixTime pt') -> pmatch pt' $ \(PDataNewtype t) -> pfromData t
-
-pwrapPosixTime :: Term s PInteger -> Term s (PAsData PPosixTime)
-pwrapPosixTime t = pdata $ pcon $ PPosixTime $ pcon $ PDataNewtype $ pdata t
 
 pdivCeil :: Term s (PInteger :--> PInteger :--> PInteger)
 pdivCeil = phoistAcyclic $
