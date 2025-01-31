@@ -1,4 +1,6 @@
-module Cardano.Core.Integrity (
+{-# LANGUAGE OverloadedStrings #-}
+
+module Plutarch.Core.Integrity (
   pisScriptCredential,
   pisPubKeyCredential,
   pdeserializeCredential,
@@ -6,6 +8,7 @@ module Cardano.Core.Integrity (
 
 import Plutarch.Core.List
 import Plutarch.Prelude
+import Plutarch.LedgerApi.V3 (PCredential)
 
 -- | Check that a data-encoded Credential is a ScriptCredential.
 -- This does not guarantee that the data-encoded term is structurally a valid Credential.

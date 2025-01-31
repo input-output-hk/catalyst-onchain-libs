@@ -51,6 +51,8 @@ library
   import:          lang
   exposed-modules:
     Plutarch.Core.Crypto
+    Plutarch.Core.Integrity
+    Plutarch.Core.Context
     Plutarch.Core.Data
     Plutarch.Core.Eval
     Plutarch.Core.FieldBinds
@@ -83,6 +85,7 @@ library
     , plutus-ledger-api
     , plutus-tx
     , prettyprinter
+    , generics-sop
     , tasty-hunit
     , text
 
