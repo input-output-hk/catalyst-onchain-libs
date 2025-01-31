@@ -8,6 +8,7 @@
 
 module Main (main) where
 
+import Plutarch.Core.Context (ptxInInfoResolved, ptxOutCredential)
 import Plutarch.Core.List
 import Plutarch.Core.Unroll
 import Plutarch.Core.ValidationLogic
@@ -158,7 +159,7 @@ punrolledCountScriptInputs = punrollBound' 100 (const def) go () # 0
     go self () = plam $ \n ->
       pelimList
         (\x xs' ->
-          let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+          let cred = ptxOutCredential $ ptxInInfoResolved x --pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
               count = pmatch cred $ \case
                 PScriptCredential _ -> (n + 1)
                 _ -> n
@@ -173,7 +174,7 @@ punrolledCountScriptInputsUnboundWhole = punrollUnboundWhole 20 go #$ 0
     go self = plam $ \n ->
       pelimList
         (\x xs' ->
-          let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+          let cred = ptxOutCredential $ ptxInInfoResolved x
               count = pmatch cred $ \case
                 PScriptCredential _ -> (n + 1)
                 _ -> n

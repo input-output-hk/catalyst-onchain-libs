@@ -10,6 +10,8 @@ cradle:
           cabal:
             - path: "./"
               component: "plutarch-onchain-lib:plutarch-onchain-lib"
+            - path: "./"
+              component: "plutarch-onchain-lib:plutarch-onchain-lib-tests"
 plugins:
   eval:
     globalOn: true

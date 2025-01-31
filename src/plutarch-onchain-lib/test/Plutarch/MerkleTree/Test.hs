@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QualifiedDo       #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use camelCase" #-}
 {-| Tests for merkle tree
 -}
 module Plutarch.MerkleTree.Test(
@@ -29,7 +31,8 @@ import Plutarch.MerkleTree.PatriciaForestry (Neighbor (..),
                                              pfrom_root, phas, pinsert, pupdate)
 import Plutarch.Monadic qualified as P
 import Plutarch.Prelude
-import Plutarch.Test.Unit (testEval)
+import TestUtils (testEval)
+--import Plutarch.Test.Unit (testEval)
 import PlutusCore.Crypto.Hash qualified as Hash
 import PlutusLedgerApi.V2 (Address (..), Credential (..))
 import Test.QuickCheck.Instances.ByteString ()
@@ -79,7 +82,7 @@ signEcdsaSecp256k1 signKey' msg =
         Nothing -> error "Invalid EcdsaSecp256k1DSIGN message"
 
 proof_bitcoin_845999 :: ClosedTerm PProof
-proof_bitcoin_845999 = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_bitcoin_845999 = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "bc13df27a19f8caf0bf922c900424025282a892ba8577095fd35256c9d553ca13a589f00f97a417d07903d138b92f25f879f9462994bf0e69b51fa19a67faef996c3f8196278c6ab196979911cc48b2d4a0d2a7aa5ef3f939eb056256d8efdfa0aa456963256af4fcb1ad43ef4e6323d1ca92c6d83ed4327904280228e1ba159"
@@ -110,7 +113,7 @@ test_verify_bitcoin_block_845999 =
    in phas # trie # block_hash # block_body # proof_bitcoin_845999
 
 proof_bitcoin_845602 :: ClosedTerm PProof
-proof_bitcoin_845602 = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_bitcoin_845602 = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "bc13df27a19f8caf0bf922c900424025282a892ba8577095fd35256c9d553ca120b8645121ebc9057f7b28fa4c0032b1f49e616dfb8dbd88e4bffd7c0844d29b011b1af0993ac88158342583053094590c66847acd7890c86f6de0fde0f7ae2479eafca17f9659f252fa13ee353c879373a65ca371093525cf359fae1704cf4a"
@@ -176,7 +179,7 @@ test_insert_bitcoin_block_845602 =
 --     └─ e81d1..[54 digits]..8406 #ec71691617bd { 0x85559FD614024611b0cD63ebBbb1EaB35A4e3cB6 → 165420644299916864 }
 
 proof_claim :: ClosedTerm PProof
-proof_claim = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_claim = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "69b5dc681cb83a38383a95fbb41d4368a91b7434e8da81373e91d305ba28cebbe0ffd3d9b275d915ccf93d116e9d992b03da0c03cd704ca3178d636a1e4948bc9eef5cfe78db17cd2b4f5fbf522f2c3a6b36f1383e9e632122af7281e622d63e6a74f8a59690e8fec5aff37e9e9193f31a7abe3a99b637530a41c6fd734030f4"
@@ -191,7 +194,7 @@ test_prove_eth_allocation =
    in (phas # trie # eth_pkh # claim_amnt # proof_claim)
 
 proof_eth_claim :: ClosedTerm PProof
-proof_eth_claim = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_eth_claim = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "1483feb0889ed790dfe56bdb5a3a8508fe4a0017ee977f2c071deaa21d9fbcbecea70a58e3a642d63ad0e73be3f294bf245637d1937865a8d8d4ed5bade85fa3c1d4d398ae0d50270bb95cae6b58e01bca40771ffb23ed79addf952f8c7c9ca4a2a26c29a034f3db8bf79355bb8043e547c0df857f28332a70f2721635e042ae"
@@ -286,7 +289,7 @@ ptrie :: ClosedTerm PMerklePatriciaForestry
 ptrie = pfrom_root # phexByteStr "4acd78f345a686361df77541b2e0b533f53362e36620a1fdd3a13e0b61a3b078"
 
 proof_kumquat :: ClosedTerm PProof
-proof_kumquat = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_kumquat = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb47238ba5d16031b6bace4aee22156f5028b0ca56dc24f7247d6435292e82c039c3490a825d2e8deddf8679ce2f95f7e3a59d9c3e1af4a49b410266d21c9344d6d08434fd717aea47d156185d589f44a59fc2e0158eab7ff035083a2a66cd3e15b"
@@ -375,7 +378,7 @@ papricot :: ClosedTerm PByteString
 papricot = pconstant "apricot[uid: 0]"
 
 proof_apricot :: ClosedTerm PProof
-proof_apricot = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_apricot = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "4be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbe280ada5ef30d55433934bbc73c89d550ee916f62822c34645e04bb66540c120f965c07fa815b86794e8703cee7e8f626c88d7da639258d2466aae67d5d041c5a117abf0e19fb78e0535891d82e5ece1310a1cf11674587dbba304c395769a988"
@@ -390,7 +393,7 @@ praspberry :: ClosedTerm PByteString
 praspberry = pconstant "raspberry[uid: 0]"
 
 proof_raspberry :: ClosedTerm PProof
-proof_raspberry = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_raspberry = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb47238ba5d16031b6bace4aee22156f5028b0ca56dc24f7247d6435292e82c039cc9e7ff03faba170e98cd3c24338b95b1ce1b8a621d1016418f1494bbeb9e4a4a0000000000000000000000000000000000000000000000000000000000000000"
@@ -405,7 +408,7 @@ pbanana :: ClosedTerm PByteString
 pbanana = pencodeUtf8 # pconstant "banana[uid: 218]"
 
 proof_banana :: ClosedTerm PProof
-proof_banana = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_banana = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb45fdf82687b1ab133324cebaf46d99d49f92720c5ded08d5b02f57530f2cc5a5fcf22cbaac4ab605dd13dbde57080661b53d8a7e23534c733acf50125cf0e5bcac9431d708d20021f1fa3f4f03468b8de194398072a402e7877376d06f747575a"
@@ -428,7 +431,7 @@ pblueberry :: ClosedTerm PByteString
 pblueberry = pconstant "blueberry[uid: 0]"
 
 proof_blueberry :: ClosedTerm PProof
-proof_blueberry = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_blueberry = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "4be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbefa63eb4576001d8658219f928172eccb5448b4d7d62cd6d95228e13ebcbd5350be527bcfc7febe3c560057d97f4190bd24b537a322315f84daafab3ada562b50c2f2115774c117f184b58dba7a23d2c93968aa40387ceb0c9a9f53e4f594e881"
@@ -448,7 +451,7 @@ pcherry :: ClosedTerm PByteString
 pcherry = pconstant "cherry[uid: 0]"
 
 proof_cherry :: ClosedTerm PProof
-proof_cherry = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_cherry = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb45fdf82687b1ab133324cebaf46d99d49f92720c5ded08d5b02f57530f2cc5a5f1508f13471a031a21277db8817615e62a50a7427d5f8be572746aa5f0d498417520a7f805c5f674e2deca5230b6942bbc71586dc94a783eebe1ed58c9a864e53"
@@ -467,7 +470,7 @@ pcoconut :: ClosedTerm PByteString
 pcoconut = pconstant "coconut[uid: 0]"
 
 proof_coconut :: ClosedTerm PProof
-proof_coconut = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_coconut = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "4be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbe280ada5ef30d55433934bbc73c89d550ee916f62822c34645e04bb66540c120f323def78732eace937391fc626efcd062552ebcf5e93f00352b86cb0f89daca0a22a7b4d767ada48673a4a9313a02a35ff47d2f55bcf10ae294127f590a4327c"
@@ -487,7 +490,7 @@ pcranberry :: ClosedTerm PByteString
 pcranberry = pconstant "cranberry[uid: 0]"
 
 proof_cranberry :: ClosedTerm PProof
-proof_cranberry = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_cranberry = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "4be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbe280ada5ef30d55433934bbc73c89d550ee916f62822c34645e04bb66540c120f323def78732eace937391fc626efcd062552ebcf5e93f00352b86cb0f89daca00a747d583e2e3db49524add1eea3063421fc04547e19c4e807810a537a63b379"
@@ -507,7 +510,7 @@ pgrapefruit :: ClosedTerm PByteString
 pgrapefruit = pconstant "grapefruit[uid: 0]"
 
 proof_grapefruit :: ClosedTerm PProof
-proof_grapefruit = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_grapefruit = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "4be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbefa63eb4576001d8658219f928172eccb5448b4d7d62cd6d95228e13ebcbd5350be527bcfc7febe3c560057d97f4190bd24b537a322315f84daafab3ada562b50c2f2115774c117f184b58dba7a23d2c93968aa40387ceb0c9a9f53e4f594e881"
@@ -527,7 +530,7 @@ pgrapes :: ClosedTerm PByteString
 pgrapes = pconstant "grapes[uid: 0]"
 
 proof_grapes :: ClosedTerm PProof
-proof_grapes = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_grapes = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "4be28f4839135e1f8f5372a90b54bb7bfaf997a5d13711bb4d7d93f9d4e04fbe280ada5ef30d55433934bbc73c89d550ee916f62822c34645e04bb66540c120f965c07fa815b86794e8703cee7e8f626c88d7da639258d2466aae67d5d041c5ada1771d107c86c8e68da458063a47f9cdb63ddb9e922ab6ccb18d9e6d4b7aaf9"
@@ -547,7 +550,7 @@ plemon :: ClosedTerm PByteString
 plemon = pconstant "lemon[uid: 0]"
 
 proof_lemon :: ClosedTerm PProof
-proof_lemon = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_lemon = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb45fdf82687b1ab133324cebaf46d99d49f92720c5ded08d5b02f57530f2cc5a5f1508f13471a031a21277db8817615e62a50a7427d5f8be572746aa5f0d49841758c5e4a29601399a5bd916e5f3b34c38e13253f4de2a3477114f1b2b8f9f2f4d"
@@ -567,7 +570,7 @@ plime :: ClosedTerm PByteString
 plime = pconstant "lime[uid: 0]"
 
 proof_lime :: ClosedTerm PProof
-proof_lime = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_lime = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb45fdf82687b1ab133324cebaf46d99d49f92720c5ded08d5b02f57530f2cc5a5fcf22cbaac4ab605dd13dbde57080661b53d8a7e23534c733acf50125cf0e5bcac9431d708d20021f1fa3f4f03468b8de194398072a402e7877376d06f747575a"
@@ -587,7 +590,7 @@ pmango :: ClosedTerm PByteString
 pmango = pconstant "mango[uid: 0]"
 
 proof_mango :: ClosedTerm PProof
-proof_mango = pcon $ PProof $ pconstant @(PBuiltinList PProofStep) $
+proof_mango = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
   [ Branch
       { skip = 0
       , neighbors = toBuiltinHexString "c7bfa4472f3a98ebe0421e8f3f03adf0f7c4340dec65b4b92b1c9f0bed209eb45fdf82687b1ab133324cebaf46d99d49f92720c5ded08d5b02f57530f2cc5a5f1508f13471a031a21277db8817615e62a50a7427d5f8be572746aa5f0d49841758c5e4a29601399a5bd916e5f3b34c38e13253f4de2a3477114f1b2b8f9f2f4d"
