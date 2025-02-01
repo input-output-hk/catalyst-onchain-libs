@@ -10,6 +10,8 @@
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
+{-# LANGUAGE InstanceSigs            #-}
+{-# LANGUAGE NamedFieldPuns          #-}
 {-|
 Module      : Plutarch.MerkleTree.PatriciaForestry
 Description : Merkle trees in Plutarch
@@ -42,16 +44,20 @@ module Plutarch.MerkleTree.PatriciaForestry(
   pdo_fork
 ) where
 
+import Data.ByteString (ByteString)
+import Generics.SOP qualified as SOP
 import GHC.Generics (Generic)
 import Plutarch.Builtin.Crypto (pblake2b_256)
 import Plutarch.Core.Internal.Builtins (pconsBS')
-import Plutarch.DataRepr
 import Plutarch.Internal.Lift
 import Plutarch.MerkleTree.Helpers (pcombine, pnibble, pnibbles, psuffix)
 import Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash, psparse_merkle_16)
 import Plutarch.Prelude
+import Plutarch.Repr.Data
 import PlutusTx qualified
+import PlutusTx.Builtins as Builtins
 import PlutusTx.Builtins.Internal (BuiltinByteString (BuiltinByteString))
+import PlutusTx.Builtins.Internal qualified as BI
 
 -- Constants
 
@@ -67,25 +73,26 @@ PlutusTx.makeLift ''MerklePatriciaForestry
 
 newtype PMerklePatriciaForestry (s :: S) = PMerklePatriciaForestry (Term s PByteString)
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PIsData, PEq, PShow)
+  deriving anyclass (SOP.Generic, PIsData, POrd, PEq, PShow)
+  deriving
+    ( PlutusType )
+    via (DeriveNewtypePlutusType PMerklePatriciaForestry)
 
-instance DerivePlutusType PMerklePatriciaForestry where type DPTStrat _ = PlutusTypeNewtype
-
--- TODO:
--- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
-instance
-  PLiftable PMerklePatriciaForestry
-  where
-  type AsHaskell PMerklePatriciaForestry = BuiltinByteString
-  type PlutusRepr PMerklePatriciaForestry = PLiftedClosed PMerklePatriciaForestry
-
-
--- TODO:
--- Fix this in Plutarch so that we can use PLiftable for types with BuiltinByteString fields.
--- deriving via
---   DeriveDataPLiftable PMerklePatriciaForestry MerklePatriciaForestry
---   instance
---     PLiftable PMerklePatriciaForestry
+instance PLiftable PMerklePatriciaForestry where
+  type AsHaskell PMerklePatriciaForestry = MerklePatriciaForestry
+  type PlutusRepr PMerklePatriciaForestry = ByteString
+  {-# INLINEABLE haskToRepr #-}
+  haskToRepr :: AsHaskell PMerklePatriciaForestry -> PlutusRepr PMerklePatriciaForestry
+  haskToRepr (MerklePatriciaForestry (BuiltinByteString str)) = str
+  {-# INLINEABLE reprToHask #-}
+  reprToHask :: PlutusRepr PMerklePatriciaForestry -> Either LiftError (AsHaskell PMerklePatriciaForestry)
+  reprToHask = Right . MerklePatriciaForestry . BuiltinByteString
+  {-# INLINEABLE reprToPlut #-}
+  reprToPlut :: PlutusRepr PMerklePatriciaForestry -> PLifted s PMerklePatriciaForestry
+  reprToPlut = reprToPlutUni
+  {-# INLINEABLE plutToRepr #-}
+  plutToRepr :: (forall (s :: S). PLifted s PMerklePatriciaForestry) -> Either LiftError (PlutusRepr PMerklePatriciaForestry)
+  plutToRepr = plutToReprUni
 
 pfrom_root :: Term s (PByteString :--> PMerklePatriciaForestry)
 pfrom_root = phoistAcyclic $ plam $ \root_ ->
@@ -107,7 +114,40 @@ data Neighbor = Neighbor
   , root   :: BuiltinByteString
   }
   deriving stock (Show, Eq, Generic)
-PlutusTx.unstableMakeIsData ''Neighbor
+
+instance PlutusTx.ToData Neighbor where
+  {-# INLINABLE toBuiltinData #-}
+  toBuiltinData :: Neighbor -> PlutusTx.BuiltinData
+  toBuiltinData (Neighbor{nibble, prefix, root}) = PlutusTx.toBuiltinData [PlutusTx.toBuiltinData nibble, PlutusTx.toBuiltinData prefix, PlutusTx.toBuiltinData root]
+
+instance PlutusTx.FromData Neighbor where
+  {-# INLINABLE fromBuiltinData #-}
+  fromBuiltinData :: PlutusTx.BuiltinData -> Maybe Neighbor
+  fromBuiltinData neighbor =
+    let toNeighbor :: BI.BuiltinData -> Maybe Neighbor
+        toNeighbor neighborList' = do
+          let neighborList = BI.unsafeDataAsList neighborList'
+          nibble <- PlutusTx.fromBuiltinData $ BI.head neighborList
+          prefix <- PlutusTx.fromBuiltinData $ BI.head (BI.tail neighborList)
+          root <- PlutusTx.fromBuiltinData $ BI.head (BI.tail $ BI.tail neighborList)
+          return Neighbor{nibble, prefix, root}
+    in
+      BI.chooseData neighbor
+          Nothing
+          Nothing
+          (toNeighbor neighbor)
+          Nothing
+          Nothing
+
+instance PlutusTx.UnsafeFromData Neighbor where
+  {-# INLINABLE unsafeFromBuiltinData #-}
+  unsafeFromBuiltinData :: PlutusTx.BuiltinData -> Neighbor
+  unsafeFromBuiltinData neighbor =
+    let bd = BI.unsafeDataAsList neighbor
+        nibble = PlutusTx.unsafeFromBuiltinData $ BI.head bd
+        prefix = PlutusTx.unsafeFromBuiltinData $ BI.head $ BI.tail bd
+        root = PlutusTx.unsafeFromBuiltinData $ BI.head $ BI.tail $ BI.tail bd
+    in Neighbor{nibble, prefix, root}
 
 data ProofStep
   = Branch
@@ -127,37 +167,48 @@ data ProofStep
 PlutusTx.unstableMakeIsData ''ProofStep
 
 data PProofStep (s :: S)
-  = PBranch (Term s (PDataRecord '["skip" ':= PInteger, "neighbors" ':= PByteString]))
-  | PFork (Term s (PDataRecord '["skip" ':= PInteger, "neighbor" ':= PNeighbor]))
-  | PLeaf (Term s (PDataRecord '["skip" ':= PInteger, "key" ':= PByteString, "value" ':= PByteString]))
+ = PBranch
+    { pproofStep'skip :: Term s (PAsData PInteger)
+    , pproofStep'neighbors :: Term s (PAsData PByteString)
+    }
+  | PFork
+      { pproofStep'skip :: Term s (PAsData PInteger)
+      , pproofStep'neighbor :: Term s (PAsData PNeighbor)
+      }
+  | PLeaf
+      { pproofStep'skip :: Term s (PAsData PInteger)
+      , pproofStep'key :: Term s (PAsData PByteString)
+      , pproofStep'value :: Term s (PAsData PByteString)
+      }
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PIsData)
-
-instance DerivePlutusType PProofStep where type DPTStrat _ = PlutusTypeData
+  deriving anyclass (SOP.Generic, PIsData, PShow, PEq)
+  deriving (PlutusType) via (DeriveAsDataStruct PProofStep)
 
 deriving via
   DeriveDataPLiftable PProofStep ProofStep
   instance
     PLiftable PProofStep
 
-
-newtype PProof (s :: S) = PProof (Term s (PBuiltinList PProofStep))
+newtype PProof (s :: S) = PProof (Term s (PBuiltinList (PAsData PProofStep)))
   deriving stock (Generic)
   deriving anyclass (PlutusType, PIsData)
 
 instance DerivePlutusType PProof where type DPTStrat _ = PlutusTypeNewtype
 
-newtype PNeighbor (s :: S) = PNeighbor
-  (Term s (PDataRecord '["nibble" ':= PInteger, "prefix" ':= PByteString, "root" ':= PByteString]))
+data PNeighbor (s :: S) = PNeighbor
+  { pneighbor'nibble :: Term s (PAsData PInteger)
+  , pneighbor'prefix :: Term s (PAsData PByteString)
+  , pneighbor'root :: Term s (PAsData PByteString)
+  }
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PDataFields, PIsData)
+  deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
+  deriving (PlutusType) via (DeriveAsDataRec PNeighbor)
 
-instance DerivePlutusType PNeighbor where type DPTStrat _ = PlutusTypeData
 
-deriving via
-  DeriveDataPLiftable PNeighbor Neighbor
-  instance
-    PLiftable PNeighbor
+-- deriving via
+--   DeriveDataPLiftable PNeighbor Neighbor
+--   instance
+--     PLiftable PNeighbor
 
 -- Test whether an element is present in the trie with a specific value. This
 -- requires a Proof of inclusion for the element. The latter can be
@@ -201,46 +252,41 @@ pupdate = phoistAcyclic $ plam $ \self key_ proof oldValue newValue ->
 
 pexcluding :: Term s (PByteString  :--> PProof :--> PByteString)
 pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
-  let go :: Term _ (PInteger :--> PBuiltinList PProofStep :--> PByteString)
+  let go :: Term _ (PInteger :--> PBuiltinList (PAsData PProofStep) :--> PByteString)
       go = pfix #$ plam $ \self cursor steps ->
         pmatch steps $ \case
           PNil -> pnull_hash
           PCons x xs ->
-            pmatch x $ \case
-              PBranch fields ->
-                pletFields @'["skip", "neighbors"] fields $ \branchF ->
-                  plet (cursor + 1 + branchF.skip) $ \nextCursor ->
+            pmatch (pfromData x) $ \case
+              PBranch {pproofStep'skip, pproofStep'neighbors} ->
+                plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
                   let root_ = (self # nextCursor # xs)
-                  in pdo_branch # path # cursor # nextCursor # root_ # branchF.neighbors
-
-              PFork fields ->
-                pletFields @'["skip", "neighbor"] fields $ \forkF ->
-                  pmatch xs $ \case
-                    PNil ->
-                      pletFields @'["prefix", "nibble", "root"] forkF.neighbor $ \neighborF ->
-                        let prefix_ = pconsBS' # neighborF.nibble # neighborF.prefix
-                        in pcombine # prefix_ # neighborF.root
-                    PCons _ _ ->
-                      plet (cursor + 1 + forkF.skip) $ \nextCursor ->
-                        let root_ = (self # nextCursor # xs)
-                        in pdo_fork # path # cursor # nextCursor # root_ # forkF.neighbor
-
-              PLeaf fields ->
-                pletFields @'["skip", "key", "value"] fields $ \leafF ->
-                  pmatch xs $ \case
-                    PNil ->
-                      pcombine # (psuffix # leafF.key # cursor) # leafF.value
-                    PCons _ _ ->
-                      plet (cursor + 1 + leafF.skip) $ \nextCursor ->
-                      plet leafF.key $ \leafKey ->
+                  in pdo_branch # path # cursor # nextCursor # root_ # pfromData pproofStep'neighbors
+              PFork {pproofStep'skip, pproofStep'neighbor} ->
+                pmatch xs $ \case
+                  PNil ->
+                    pmatch (pfromData pproofStep'neighbor) $ \(PNeighbor {pneighbor'nibble, pneighbor'prefix, pneighbor'root}) ->
+                      let prefix_ = pconsBS' # pfromData pneighbor'nibble # pfromData pneighbor'prefix
+                      in pcombine # prefix_ # pfromData pneighbor'root
+                  PCons _ _ ->
+                    plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
                       let root_ = (self # nextCursor # xs)
-                          neighbor_ = ( pcon $ PNeighbor $
-                            pdcons @"nibble" # pdata (pnibble # leafKey # cursor)
-                              #$ pdcons @"prefix" # pdata (psuffix # leafKey # nextCursor)
-                              #$ pdcons @"root" # leafF.value
-                              #$ pdnil
-                            )
-                       in pdo_fork # path # cursor # nextCursor # root_ # neighbor_
+                      in pdo_fork # path # cursor # nextCursor # root_ # pfromData pproofStep'neighbor
+              PLeaf {pproofStep'skip, pproofStep'key, pproofStep'value} ->
+                pmatch xs $ \case
+                  PNil ->
+                    pcombine # (psuffix # pfromData pproofStep'key # cursor) # pfromData pproofStep'value
+                  PCons _ _ ->
+                    plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
+                    plet (pfromData pproofStep'key) $ \leafKey ->
+                    let root_ = (self # nextCursor # xs)
+                        neighbor_ = pcon $
+                          PNeighbor {
+                            pneighbor'nibble = pdata (pnibble # leafKey # cursor),
+                            pneighbor'prefix = pdata (psuffix # leafKey # nextCursor),
+                            pneighbor'root = pproofStep'value
+                          }
+                      in pdo_fork # path # cursor # nextCursor # root_ # neighbor_
   in go # 0 # pto proof
 
 -- | Compute the resulting hash digest from a 'Proof' associated with an
@@ -251,34 +297,29 @@ pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
 --
 pincluding :: Term s (PByteString :--> PByteString :--> PProof :--> PByteString)
 pincluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) ((pblake2b_256 #) -> value_) proof ->
-  let go :: Term _ (PInteger :--> PBuiltinList PProofStep :--> PByteString)
+  let go :: Term _ (PInteger :--> PBuiltinList (PAsData PProofStep) :--> PByteString)
       go = pfix #$ plam $ \self cursor steps ->
         pelimList (\proofStep ys ->
-          pmatch proofStep $ \case
-            PBranch fields ->
-              ptraceInfo ("branch" <> pshow cursor) $
-                pletFields @'["skip", "neighbors"] fields $ \branchF ->
-                  plet (cursor + 1 + branchF.skip) $ \nextCursor ->
-                    let root_ = self # nextCursor # ys
-                    in pdo_branch # path # cursor # nextCursor # root_ # branchF.neighbors
-            PFork fields ->
-              pletFields @'["skip", "neighbor"] fields $ \forkF ->
-                plet (cursor + 1 + forkF.skip) $ \nextCursor ->
-                  let root_ = self # nextCursor # ys
-                  in pdo_fork # path # cursor # nextCursor # root_ # forkF.neighbor
-            PLeaf fields ->
-              ptraceInfo ("leaf" <> pshow cursor) $
-                pletFields @'["skip", "key", "value"] fields $ \leafF ->
-                  plet (cursor + 1 + leafF.skip) $ \nextCursor ->
-                    plet leafF.key $ \key_ ->
-                      let neighbor_ = pcon $
-                            PNeighbor $
-                              pdcons @"nibble" # pdata (pnibble # key_ # (nextCursor - 1))
-                                #$ pdcons @"prefix" # pdata (psuffix # key_ # nextCursor)
-                                #$ pdcons @"root" # leafF.value
-                                #$ pdnil
-                          root_ = self # nextCursor # ys
-                      in pdo_fork # path # cursor # nextCursor # root_ # neighbor_
+          pmatch (pfromData proofStep) $ \case
+            PBranch {pproofStep'skip, pproofStep'neighbors} ->
+              plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
+                let root_ = self # nextCursor # ys
+                in pdo_branch # path # cursor # nextCursor # root_ # pfromData pproofStep'neighbors
+            PFork {pproofStep'skip, pproofStep'neighbor} ->
+              plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
+                let root_ = self # nextCursor # ys
+                in pdo_fork # path # cursor # nextCursor # root_ # pfromData pproofStep'neighbor
+            PLeaf {pproofStep'skip, pproofStep'key, pproofStep'value} ->
+              plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
+                plet pproofStep'key $ \key_ ->
+                  let neighbor_ = pcon $
+                        PNeighbor {
+                          pneighbor'nibble = pdata (pnibble # pfromData key_ # (nextCursor - 1)),
+                          pneighbor'prefix = pdata (psuffix # pfromData key_ # nextCursor),
+                          pneighbor'root = pproofStep'value
+                        }
+                      root_ = self # nextCursor # ys
+                  in pdo_fork # path # cursor # nextCursor # root_ # neighbor_
 
         )
         (pcombine # (psuffix # path # cursor) # value_)
@@ -298,13 +339,13 @@ pdo_branch = phoistAcyclic $ plam $ \path cursor nextCursor root_ neighbors_ ->
 
 pdo_fork :: Term s (PByteString :--> PInteger :--> PInteger :--> PByteString :--> PNeighbor :--> PByteString)
 pdo_fork = phoistAcyclic $ plam $ \path cursor nextCursor root_ neighbor_ ->
-  pletFields @'["nibble", "prefix", "root"] neighbor_ $ \neighborF ->
+  pmatch neighbor_ $ \PNeighbor {pneighbor'nibble, pneighbor'prefix, pneighbor'root} ->
   plet (pnibble # path # (nextCursor - 1)) $ \branch ->
   plet (pnibbles # path # cursor # (nextCursor - 1)) $ \prefix_ ->
-  plet neighborF.nibble $ \neighborNibble ->
+  plet (pfromData pneighbor'nibble) $ \neighborNibble ->
   pif (branch #== neighborNibble)
     perror
     (pcombine # prefix_ #
       (psparse_merkle_16 # branch # root_ #
         neighborNibble #
-        (pcombine # neighborF.prefix # neighborF.root)))
+        (pcombine # pfromData pneighbor'prefix # pfromData pneighbor'root)))

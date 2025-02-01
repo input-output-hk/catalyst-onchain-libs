@@ -2,7 +2,7 @@
 
 let
   sha256map = {
-    "https://github.com/Plutonomicon/plutarch-plutus"."8cc0a4ca3ed494a79fe019c72173b369cd26cb84" = "sha256-zQ0qv9e3Gy6Myn8wx+geJtCL5L2qJlpruSbWmrgyLOE=";
+    "https://github.com/Plutonomicon/plutarch-plutus"."fd7d1c1fc173542f952f19272554027183659dd6" = "sha256-lU2JF9KYvzEPfVLHdLkrM1hTTuc9NYi2hQPFnLDm2d8=";
   };
 
   modules = [{ }];

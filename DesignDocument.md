@@ -33,8 +33,8 @@ Modules like `Plutarch.Core.List` provide functions such as `pelemAtFast'` to ac
 ### 4. `Plutarch.Core.Eval` (`Eval.hs`)
 - **Purpose**: Evaluating and serializing Plutarch terms.
 
-### 5. `Plutarch.Core.FieldBinds` (`FieldBinds.hs`)
-- **Purpose**: abstractions for handling field bindings in records.
+### 5. `Plutarch.Core.Integrity` (`Integrity.hs`)
+- **Purpose**: Utilities for verifying the correctness of the BuiltinData encoding of various types.
 
 ### 6. `Plutarch.Core.List` (`List.hs`)
 - **Purpose**: Specialized high efficiency list operations.

@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP                  #-}
-{-# LANGUAGE OverloadedRecordDot  #-}
+{-# LANGUAGE NamedFieldPuns       #-}
 {-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE PolyKinds            #-}
 {-# LANGUAGE QualifiedDo          #-}
@@ -21,8 +21,6 @@ module Plutarch.Core.Utils(
   pisRewarding,
   ptryFromInlineDatum,
   pfromPDatum,
-  pnonew,
-  punnew,
   ppair,
   passert,
   pcheck,
@@ -39,7 +37,7 @@ module Plutarch.Core.Utils(
   pmapMaybe,
   paysToPubKey,
   ptryOutputToAddress,
-  ptryOwnOutput,
+  ptryOutputToScriptHash,
   ptryOwnInput,
   ptxSignedByPkh,
   (#-),
@@ -51,8 +49,6 @@ module Plutarch.Core.Utils(
   (#/=),
   pmapAndConvertList,
   pintToByteString,
-  punwrapPosixTime,
-  pwrapPosixTime,
   pdivCeil,
   pisScriptCredential,
   pisPubKeyCredential,
@@ -62,18 +58,14 @@ module Plutarch.Core.Utils(
 import Data.Text qualified as T
 import Plutarch.Prelude
 
-import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
-                              KeyGuarantees (Sorted), PAddress,
-                              PCredential (..), PDatum, PMaybeData,
-                              POutputDatum (POutputDatum), PPosixTime (..),
-                              PPubKeyHash, PScriptHash, PScriptInfo, PTxInInfo,
-                              PTxOut, PTxOutRef, PValue (..))
+import Plutarch.LedgerApi.V3
 import Plutarch.Monadic qualified as P
 
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.Value (pvalueContains)
 import Plutarch.Internal.Term (PType)
 import Prelude
+import Plutarch.Core.Context (ptxOutCredential, paddressCredential, ptxOutAddress)
 
 pfail ::
   forall (s :: S) a.
@@ -102,10 +94,10 @@ pdebug _ b = b
 
 data PTxOutH (s :: S) =
   PTxOutH
-    { ptxOutAddress         :: Term s PAddress
-    , ptxOutValue           :: Term s (PValue 'Sorted 'Positive)
-    , ptxOutDatum           :: Term s POutputDatum
-    , ptxOutReferenceScript :: Term s (PMaybeData PScriptHash)
+    { ptxOutAddressH         :: Term s PAddress
+    , ptxOutValueH           :: Term s (PValue 'Sorted 'Positive)
+    , ptxOutDatumH           :: Term s POutputDatum
+    , ptxOutReferenceScriptH :: Term s (PMaybeData PScriptHash)
     }
 
 pisRewarding :: Term s (PAsData PScriptInfo) -> Term s PBool
@@ -115,7 +107,7 @@ ptryFromInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
 ptryFromInlineDatum = phoistAcyclic $
   plam $
     flip pmatch $ \case
-      POutputDatum ((pfield @"outputDatum" #) -> datum) -> datum
+      POutputDatum pdatum -> pdatum
       _ -> ptraceInfoError "not an inline datum"
 
 -- | Parse a Datum into a specific structure (specified by the type argument)
@@ -129,22 +121,6 @@ pfromPDatum ::
   PTryFrom PData a =>
   Term s (PDatum :--> a)
 pfromPDatum = phoistAcyclic $ plam $ flip ptryFrom fst . pto
-
--- Extract the inner type from a type which contains a `DataNewtype`
--- ex. PPosixTime -> PInteger
---     PPubKeyHash -> PByteString
-pnonew :: forall {a :: PType} {b :: PType} {s :: S}.
-                ((PInner a :: PType) ~ (PDataNewtype b :: PType), PIsData b) =>
-                Term s a -> Term s b
-pnonew nt = pmatch (pto nt) $ \(PDataNewtype bs) -> pfromData bs
-
--- Extract the inner type from a `PDataNewType`
--- ex. PDataNewtype PInteger -> PInteger
---     PDataNewtype PByteString -> PByteString
-punnew :: forall {b :: PType} {s :: S}.
-                PIsData b =>
-                Term s (PDataNewtype b) -> Term s b
-punnew nt = pmatch nt $ \(PDataNewtype bs) -> pfromData bs
 
 ppair :: Term s a -> Term s b -> Term s (PPair a b)
 ppair a b = pcon (PPair a b)
@@ -222,37 +198,35 @@ tcexpectJust escape ma = tcont $ \f -> pmatch ma $ \case
   PNothing -> escape
 
 paysToAddress :: Term s (PAddress :--> PTxOut :--> PBool)
-paysToAddress = phoistAcyclic $ plam $ \adr txOut -> adr #== (pfield @"address" # txOut)
+paysToAddress = phoistAcyclic $ plam $ \adr txOut -> adr #== ptxOutAddress txOut
 
 paysValueToAddress ::
   Term s (PValue 'Sorted 'Positive :--> PAddress :--> PTxOut :--> PBool)
 paysValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
-    pletFields @'["address", "value"] txOut $ \txoFields ->
-      txoFields.address #== adr #&& txoFields.value #== val
+    pmatch txOut $ \(PTxOut {ptxOut'address, ptxOut'value}) ->
+      ptxOut'address #== adr #&& pvalueContains # val # pfromData ptxOut'value
 
 paysAtleastValueToAddress ::
   Term s (PValue 'Sorted 'Positive :--> PAddress :--> PTxOut :--> PBool)
 paysAtleastValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
-    pletFields @'["address", "value"] txOut $ \txoFields ->
-      txoFields.address #== adr #&& pvalueContains # val # txoFields.value
+    pmatch txOut $ \(PTxOut {ptxOut'address, ptxOut'value}) ->
+      ptxOut'address #== adr #&& pvalueContains # val # pfromData ptxOut'value
 
 paysToCredential :: Term s (PScriptHash :--> PTxOut :--> PBool)
 paysToCredential = phoistAcyclic $
   plam $ \valHash txOut ->
-    let txOutCred = pfield @"credential" # (pfield @"address" # txOut)
-     in pmatch txOutCred $ \case
-          PScriptCredential txOutValHash -> (pfield @"_0" # txOutValHash) #== valHash
-          PPubKeyCredential _ -> (pcon PFalse)
-
+    pmatch (ptxOutCredential txOut) $ \case
+      PScriptCredential (pfromData -> txOutValHash) -> txOutValHash #== valHash
+      PPubKeyCredential _ -> (pcon PFalse)
 
 pgetPubKeyHash :: Term s PAddress -> Term s (PAsData PPubKeyHash)
 pgetPubKeyHash addr =
-  let cred = pfield @"credential" # addr
+  let cred = paddressCredential addr 
    in pmatch cred $ \case
         PScriptCredential _ -> perror
-        PPubKeyCredential pkh' -> pfield @"_0" # pkh'
+        PPubKeyCredential pkh' -> pkh'
 
 pmapMaybe ::
   forall (list :: PType -> PType) (a :: PType) (b :: PType).
@@ -271,37 +245,42 @@ pmapMaybe =
         )
         (const pnil)
 
-paysToPubKey :: Term s (PPubKeyHash :--> PTxOut :--> PBool)
+paysToPubKey :: Term s (PAsData PPubKeyHash :--> PTxOut :--> PBool)
 paysToPubKey = phoistAcyclic $
   plam $ \pkh txOut ->
-    let txOutCred = pfield @"credential" # (pfield @"address" # txOut)
+    let txOutCred = ptxOutCredential txOut
      in pmatch txOutCred $ \case
           PScriptCredential _ -> pconstant False
-          PPubKeyCredential pkh' -> (pfield @"_0" # pkh') #== pkh
+          PPubKeyCredential pkh' -> pkh' #== pkh
 
-ptryOutputToAddress :: (PIsListLike list PTxOut) => Term s (list PTxOut :--> PAddress :--> PTxOut)
+ptryOutputToAddress :: (PIsListLike list (PAsData PTxOut)) => Term s (list (PAsData PTxOut) :--> PAddress :--> PTxOut)
 ptryOutputToAddress = phoistAcyclic $
   plam $ \outs target ->
     ( pfix #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
-              pif (target #== (pfield @"address" # txo)) txo (self # txos)
+             pmatch (pfromData txo) $ \case 
+              PTxOut {ptxOut'address} -> 
+                pif (target #== ptxOut'address) (pfromData txo) (self # txos)
           )
           perror
           xs
     )
       # outs
 
-ptryOwnOutput :: Term s (PBuiltinList (PAsData PTxOut) :--> PScriptHash :--> PTxOut)
-ptryOwnOutput = phoistAcyclic $
+ptryOutputToScriptHash :: Term s (PBuiltinList (PAsData PTxOut) :--> PAsData PScriptHash :--> PTxOut)
+ptryOutputToScriptHash = phoistAcyclic $
   plam $ \outs target ->
     ( pfix #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
-              pmatch (pfield @"credential" # (pfield @"address" # txo)) $ \case
-                PPubKeyCredential _ -> (self # txos)
-                PScriptCredential ((pfield @"_0" #) -> vh) ->
-                  pif (target #== vh) (pfromData txo) (self # txos)
+              pmatch (pfromData txo) $ \case
+                PTxOut {ptxOut'address} ->
+                  pmatch ptxOut'address $ \addr ->
+                    pmatch (paddress'credential addr) $ \case
+                      PScriptCredential vh ->
+                        pif (target #== vh) (pfromData txo) (self # txos)
+                      PPubKeyCredential _ -> (self # txos)
           )
           perror
           xs
@@ -311,7 +290,10 @@ ptryOwnOutput = phoistAcyclic $
 ptryOwnInput :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PTxOutRef :--> PTxOut)
 ptryOwnInput = phoistAcyclic $
   plam $ \inputs ownRef ->
-    precList (\self x xs -> pletFields @'["outRef", "resolved"] x $ \txInFields -> pif (ownRef #== txInFields.outRef) txInFields.resolved (self # xs)) (const perror) # inputs
+    precList (\self x xs ->
+      pmatch (pfromData x) $ \(PTxInInfo {ptxInInfo'outRef, ptxInInfo'resolved}) ->
+          pif (ownRef #== ptxInInfo'outRef) ptxInInfo'resolved (self # xs)
+      ) (const perror) # inputs
 
 ptxSignedByPkh ::
   Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
@@ -322,13 +304,16 @@ ptxSignedByPkh = pelem
 -}
 phasUTxO ::
   ClosedTerm
-    ( PAsData PTxOutRef
+    ( PTxOutRef
         :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
     )
 phasUTxO = phoistAcyclic $
   plam $ \oref inInputs ->
-    pany @PBuiltinList # plam (\input -> oref #== (pfield @"outRef" # input)) # inInputs
+    pany @PBuiltinList # plam (\input ->
+      pmatch (pfromData input) $ \ininfo ->
+        oref #== ptxInInfo'outRef ininfo
+      ) # inInputs
 
 pand'List :: [Term s PBool] -> Term s PBool
 pand'List ts' =
@@ -336,6 +321,8 @@ pand'List ts' =
     [] -> pconstant True
     ts -> foldl1 (\res x -> pand' # res # x) ts
 
+-- Metaprogramming Example
+-- This function was merged into Plutarch. 
 -- pcond ::  [(Term s PBool, Term s a)] -> Term s a -> Term s a
 -- pcond [] def                  = def
 -- pcond ((cond, x) : conds) def = pif cond x $ pcond conds def
@@ -380,12 +367,6 @@ pshowDigit = phoistAcyclic $
       , (digit #== 9, pconstant "9")
       ]
       perror
-
-punwrapPosixTime :: Term s (PAsData PPosixTime) -> Term s PInteger
-punwrapPosixTime pt = pmatch (pfromData pt) $ \(PPosixTime pt') -> pmatch pt' $ \(PDataNewtype t) -> pfromData t
-
-pwrapPosixTime :: Term s PInteger -> Term s (PAsData PPosixTime)
-pwrapPosixTime t = pdata $ pcon $ PPosixTime $ pcon $ PDataNewtype $ pdata t
 
 pdivCeil :: Term s (PInteger :--> PInteger :--> PInteger)
 pdivCeil = phoistAcyclic $

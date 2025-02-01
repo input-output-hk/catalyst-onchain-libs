@@ -18,7 +18,7 @@ import Plutarch.Prelude
 -- | Checks if a tokenName is prefixed by a certain ByteString
 pisPrefixedWith :: ClosedTerm (PTokenName :--> PByteString :--> PBool)
 pisPrefixedWith = plam $ \tn prefix ->
-  pmatch (pto tn) $ \(PDataNewtype tnBS) -> pisPrefixOf # prefix # pfromData tnBS
+  pisPrefixOf # prefix # pto tn
 
 -- | Checks if the first ByteString is a prefix of the second
 pisPrefixOf :: ClosedTerm (PByteString :--> PByteString :--> PBool)

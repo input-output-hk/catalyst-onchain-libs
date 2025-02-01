@@ -50,10 +50,11 @@ common lang
 library
   import:          lang
   exposed-modules:
+    Plutarch.Core.Context
     Plutarch.Core.Crypto
     Plutarch.Core.Data
     Plutarch.Core.Eval
-    Plutarch.Core.FieldBinds
+    Plutarch.Core.Integrity
     Plutarch.Core.Internal.Builtins
     Plutarch.Core.List
     Plutarch.Core.PByteString
@@ -77,6 +78,7 @@ library
     , base16-bytestring
     , bytestring
     , cardano-binary
+    , generics-sop
     , plutarch
     , plutarch-ledger-api
     , plutus-core
@@ -93,13 +95,14 @@ test-suite plutarch-onchain-lib-tests
   other-modules:
     Plutarch.List.Test
     Plutarch.MerkleTree.Test
+    TestUtils
 
   hs-source-dirs: test
   build-depends:
     , base
     , bytestring
     , cardano-crypto-class
-    , plutarch              ==1.9.0
+    , plutarch
     , plutarch-ledger-api
     , plutarch-onchain-lib
     , plutarch-testlib
@@ -107,7 +110,9 @@ test-suite plutarch-onchain-lib-tests
     , plutus-ledger-api
     , quickcheck-instances
     , tasty
+    , tasty-hunit
     , tasty-quickcheck
+    , text
 
 test-suite plutarch-onchain-lib-bench
   import:         lang
@@ -116,7 +121,7 @@ test-suite plutarch-onchain-lib-bench
   hs-source-dirs: test
   build-depends:
     , base
-    , plutarch              ==1.9.0
+    , plutarch
     , plutarch-ledger-api
     , plutarch-onchain-lib
     , plutarch-testlib

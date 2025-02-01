@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedRecordDot #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Plutarch.Core.ValidationLogic (
   penforceNSpendRedeemers
@@ -17,10 +17,11 @@ import Plutarch.Core.Utils (pand'List)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
                               PCredential (..), PRedeemer, PScriptPurpose,
-                              PTxInInfo, PTxOut, PValue)
+                              PTxInInfo, PTxOut (..), PValue)
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusLedgerApi.V3 (Value)
+import Plutarch.Core.Context (ptxOutCredential, ptxInInfoResolved, paddressCredential)
 
 {- | Check that there is exactly n spend plutus scripts executed in the transaction via the txInfoRedeemers list.
     Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
@@ -74,7 +75,7 @@ pcountScriptInputs =
         go = pfix #$ plam $ \self n ->
               pelimList
                 (\x xs ->
-                  let cred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+                  let cred = ptxOutCredential $ ptxInInfoResolved x
                    in pmatch cred $ \case
                         PScriptCredential _ -> self # (n + 1) # xs
                         _ -> self # n # xs
@@ -83,13 +84,13 @@ pcountScriptInputs =
      in go # 0
 
 -- | Count the number of transaction inputs from the provided credential.
-pcountInputsFromCred :: Term (s :: S) (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
+pcountInputsFromCred :: Term (s :: S) (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 pcountInputsFromCred =
   phoistAcyclic $ plam $ \cred txIns ->
     let go = pfix #$ plam $ \self n ->
               pelimList
                 (\x xs ->
-                  let inputCred = pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+                  let inputCred = ptxOutCredential $ ptxInInfoResolved $ pfromData x
                    in pif (cred #== inputCred) (self # (n + 1) # xs) (self # n # xs)
                 )
                 n
@@ -102,17 +103,16 @@ pemptyLedgerValue :: ClosedTerm (PValue 'Sorted 'Positive)
 pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
 
 -- | Return the total value spent by all the transaction inputs that are from the provided credential.
-pvalueFromCred :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PValue 'Sorted 'Positive)
+pvalueFromCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PValue 'Sorted 'Positive)
 pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
   (pfix #$ plam $ \self acc ->
     pelimList
       (\txIn xs ->
         self
-          # pletFields @'["address", "value"] (pfield @"resolved" # txIn) (\txInF ->
-                pif ((pfield @"credential" # txInF.address) #== cred)
-                    (acc <> pfromData txInF.value)
-                    acc
-                    )
+          # pmatch (ptxInInfoResolved (pfromData txIn)) (\(PTxOut {ptxOut'address, ptxOut'value}) ->
+              pif (paddressCredential ptxOut'address #== cred)
+                  (acc <> pfromData ptxOut'value)
+                  acc)
           # xs
       )
       acc
@@ -121,18 +121,16 @@ pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
   # inputs
 
 -- | Return the total value produced by all the transaction outputs that are to the provided credential.
-pvalueToCred :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxOut) :--> PValue 'Sorted 'Positive)
+pvalueToCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxOut) :--> PValue 'Sorted 'Positive)
 pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
   let value = (pfix #$ plam $ \self acc ->
                 pelimList
                   (\txOut xs ->
                     self
-                      # pletFields @'["address", "value"] txOut (\txOutF ->
-                          plet txOutF.address $ \addr ->
-                            pif (pfield @"credential" # addr #== cred)
-                                (acc <> pfromData txOutF.value)
-                                acc
-                                )
+                      # pmatch (pfromData txOut) (\(PTxOut {ptxOut'address, ptxOut'value}) ->
+                          pif (paddressCredential ptxOut'address #== cred)
+                              (acc <> pfromData ptxOut'value)
+                              acc)
                       # xs
                   )
                   acc
@@ -142,13 +140,13 @@ pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
   in value
 
 -- | Return the transaction inputs that are from the provided credential.
-pinputsFromCredential :: Term s (PAsData PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PList PTxOut)
+pinputsFromCredential :: Term s (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PList PTxOut)
 pinputsFromCredential = phoistAcyclic $ plam $ \cred txIns ->
   let go = pfix #$ plam $ \self acc ->
             pelimList
               (\x xs ->
-                  plet (pfield @"resolved" # pfromData x) $ \txInOut->
-                    let inputCred = pfield @"credential" # (pfield @"address" # txInOut)
+                  plet (ptxInInfoResolved $ pfromData x) $ \txInOut->
+                    let inputCred = ptxOutCredential txInOut
                     in pif (cred #== inputCred) (self # (pcons # txInOut # acc) # xs) (self # acc # xs)
               )
               acc

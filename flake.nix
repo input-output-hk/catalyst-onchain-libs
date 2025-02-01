@@ -31,7 +31,7 @@
     };
 
     plutarch = {
-      url = "github:Plutonomicon/plutarch-plutus/8cc0a4ca3ed494a79fe019c72173b369cd26cb84";
+      url = "github:Plutonomicon/plutarch-plutus/fd7d1c1fc173542f952f19272554027183659dd6";
     };
   };
 
