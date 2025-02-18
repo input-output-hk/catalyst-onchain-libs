@@ -25,6 +25,7 @@ import PlutusLedgerApi.V3 (Datum (..), OutputDatum (NoOutputDatum),
                            ScriptInfo (SpendingScript), ScriptPurpose (..),
                            TxId (..), TxInInfo (..), TxInfo (..), TxOut (..),
                            TxOutRef (..), always)
+import PlutusLedgerApi.V3.MintValue (emptyMintValue)
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as Map
 import Test.Tasty (TestTree, testGroup)
@@ -37,9 +38,6 @@ _mkScriptContext i =
     (mkTxInfo i)
     (Redeemer (PlutusTx.toBuiltinData (1 :: Integer)))
     (SpendingScript (TxOutRef (TxId "") 0) (Just (Datum $ PlutusTx.toBuiltinData @Integer 1)))
-
-emptyMintValue :: Value
-emptyMintValue = mempty
 
 mkRedeemer :: Integer -> Redeemer
 mkRedeemer i = Redeemer (PlutusTx.toBuiltinData i)
