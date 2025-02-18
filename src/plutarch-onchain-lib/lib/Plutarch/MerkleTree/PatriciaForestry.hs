@@ -205,10 +205,10 @@ data PNeighbor (s :: S) = PNeighbor
   deriving (PlutusType) via (DeriveAsDataRec PNeighbor)
 
 
--- deriving via
---   DeriveDataPLiftable PNeighbor Neighbor
---   instance
---     PLiftable PNeighbor
+deriving via
+  DeriveDataPLiftable (PAsData PNeighbor) Neighbor
+  instance
+    PLiftable PNeighbor
 
 -- Test whether an element is present in the trie with a specific value. This
 -- requires a Proof of inclusion for the element. The latter can be
