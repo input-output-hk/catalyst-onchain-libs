@@ -61,11 +61,12 @@ import Plutarch.Prelude
 import Plutarch.LedgerApi.V3
 import Plutarch.Monadic qualified as P
 
+import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
+                              ptxOutCredential)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.Value (pvalueContains)
 import Plutarch.Internal.Term (PType)
 import Prelude
-import Plutarch.Core.Context (ptxOutCredential, paddressCredential, ptxOutAddress)
 
 pfail ::
   forall (s :: S) a.
@@ -100,8 +101,29 @@ data PTxOutH (s :: S) =
     , ptxOutReferenceScriptH :: Term s (PMaybeData PScriptHash)
     }
 
+-- | Check the script info to determine if the script is being executed as a minting script.
+pisMintingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisMintingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 0
+
+-- | Check the script info to determine if the script is being executed as a spending script.
+pisSpendingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisSpendingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 1
+
+-- | Check the script info to determine if the script is being executed as a rewarding script.
 pisRewarding :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisRewarding term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
+
+-- | Check the script info to determine if the script is being executed as a certifying script.
+pisCertifyingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisCertifyingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 3
+
+-- | Check the script info to determine if the script is being executed as a voting script.
+pisVotingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
+
+-- | Check the script info to determine if the script is being executed as a proposing script.
+pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
 
 ptryFromInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
 ptryFromInlineDatum = phoistAcyclic $
@@ -223,7 +245,7 @@ paysToCredential = phoistAcyclic $
 
 pgetPubKeyHash :: Term s PAddress -> Term s (PAsData PPubKeyHash)
 pgetPubKeyHash addr =
-  let cred = paddressCredential addr 
+  let cred = paddressCredential addr
    in pmatch cred $ \case
         PScriptCredential _ -> perror
         PPubKeyCredential pkh' -> pkh'
@@ -259,8 +281,8 @@ ptryOutputToAddress = phoistAcyclic $
     ( pfix #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
-             pmatch (pfromData txo) $ \case 
-              PTxOut {ptxOut'address} -> 
+             pmatch (pfromData txo) $ \case
+              PTxOut {ptxOut'address} ->
                 pif (target #== ptxOut'address) (pfromData txo) (self # txos)
           )
           perror
@@ -322,7 +344,7 @@ pand'List ts' =
     ts -> foldl1 (\res x -> pand' # res # x) ts
 
 -- Metaprogramming Example
--- This function was merged into Plutarch. 
+-- This function was merged into Plutarch.
 -- pcond ::  [(Term s PBool, Term s a)] -> Term s a -> Term s a
 -- pcond [] def                  = def
 -- pcond ((cond, x) : conds) def = pif cond x $ pcond conds def
