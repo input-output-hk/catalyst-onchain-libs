@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE PolyKinds           #-}
 {-# LANGUAGE QualifiedDo         #-}
+{-# LANGUAGE UndecidableInstances  #-}
+
 module Plutarch.Core.Time (
   PPosixTimeRange,
   PPosixFiniteRange(..),
@@ -19,6 +21,7 @@ import Plutarch.Monadic qualified as P
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 import Generics.SOP qualified as SOP
+import Plutarch.Repr.SOP (DeriveAsSOPRec (DeriveAsSOPRec))
 
 type PPosixTimeRange = PInterval PPosixTime
 
@@ -32,8 +35,7 @@ data PPosixFiniteRange (s :: S) = PPosixFiniteRange
     , PEq 
     , PShow 
     )
-deriving via (PlutusType) via (DeriveAsSOPRec PPosixFiniteRange)
-
+  deriving (PlutusType) via (DeriveAsSOPRec PPosixFiniteRange)
 
 -- | Convert a 'PPosixTimeRange' to a 'PPosixFiniteRange'.
 -- Errors if the provided time range is not finite.
