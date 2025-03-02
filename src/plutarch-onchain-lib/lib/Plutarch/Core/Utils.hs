@@ -19,8 +19,7 @@ module Plutarch.Core.Utils(
   pdebug,
   PTxOutH(..),
   pisRewarding,
-  ptryFromInlineDatum,
-  pfromPDatum,
+  pmatchInlineDatum,
   ppair,
   passert,
   pcheck,
@@ -52,6 +51,11 @@ module Plutarch.Core.Utils(
   pdivCeil,
   pisScriptCredential,
   pisPubKeyCredential,
+  pisVotingScript,
+  pisProposingScript,
+  pisCertifyingScript,
+  pisMintingScript,
+  pisSpendingScript,
   pdeserializeCredential,
 ) where
 
@@ -125,24 +129,12 @@ pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
 pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
 
-ptryFromInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
-ptryFromInlineDatum = phoistAcyclic $
+pmatchInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
+pmatchInlineDatum = phoistAcyclic $
   plam $
     flip pmatch $ \case
       POutputDatum pdatum -> pdatum
       _ -> ptraceInfoError "not an inline datum"
-
--- | Parse a Datum into a specific structure (specified by the type argument)
--- and error if the datum does not decode to the expected structure.
--- Note: This function is very inefficient and should typically not be used, especially if the UTxO
--- in question has a state token that already enforces the correctness of the Datum structure.
--- For outputs typically you should prefer to construct the expected output datum and compare it against the
--- actual output datum thus entirely avoiding the need for decoding.
-pfromPDatum ::
-  forall (a :: PType) (s :: S).
-  PTryFrom PData a =>
-  Term s (PDatum :--> a)
-pfromPDatum = phoistAcyclic $ plam $ flip ptryFrom fst . pto
 
 ppair :: Term s a -> Term s b -> Term s (PPair a b)
 ppair a b = pcon (PPair a b)

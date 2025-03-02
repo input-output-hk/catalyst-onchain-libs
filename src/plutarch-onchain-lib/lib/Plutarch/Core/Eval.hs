@@ -102,7 +102,6 @@ ptraces p =
     (Right _, _, traceLog) ->
       traceLog
 
-
 toBuiltinHexString :: String -> BuiltinByteString
 toBuiltinHexString = P.toBuiltin . toHexString
 

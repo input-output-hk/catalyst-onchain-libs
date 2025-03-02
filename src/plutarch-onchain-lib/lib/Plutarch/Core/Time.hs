@@ -18,6 +18,7 @@ import Plutarch.LedgerApi.V3 (PExtended (PFinite), PInterval (..),
 import Plutarch.Monadic qualified as P
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
+import Generics.SOP qualified as SOP
 
 type PPosixTimeRange = PInterval PPosixTime
 
@@ -27,11 +28,12 @@ data PPosixFiniteRange (s :: S) = PPosixFiniteRange
   }
   deriving stock (Generic)
   deriving anyclass
-    ( PlutusType
+    ( SOP.Generic
+    , PEq 
+    , PShow 
     )
+deriving via (PlutusType) via (DeriveAsSOPRec PPosixFiniteRange)
 
-instance DerivePlutusType PPosixFiniteRange where
-  type DPTStrat _ = PlutusTypeScott
 
 -- | Convert a 'PPosixTimeRange' to a 'PPosixFiniteRange'.
 -- Errors if the provided time range is not finite.
