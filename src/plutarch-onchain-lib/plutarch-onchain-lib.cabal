@@ -52,7 +52,6 @@ library
   exposed-modules:
     Plutarch.Core.Context
     Plutarch.Core.Crypto
-    Plutarch.Core.Data
     Plutarch.Core.Eval
     Plutarch.Core.Integrity
     Plutarch.Core.Internal.Builtins

@@ -27,31 +27,28 @@ Modules like `Plutarch.Core.List` provide functions such as `pelemAtFast'` to ac
 ### 2. `Plutarch.Core.Crypto` (`Crypto.hs`)
 - **Purpose**: Cryptographic utilities for handling public keys and hashes.
 
-### 3. `Plutarch.Core.Data` (`Data.hs`)
-- **Purpose**: Abstracts data extraction and handling for `PDataNewtype`.
-
-### 4. `Plutarch.Core.Eval` (`Eval.hs`)
+### 3. `Plutarch.Core.Eval` (`Eval.hs`)
 - **Purpose**: Evaluating and serializing Plutarch terms.
 
-### 5. `Plutarch.Core.Integrity` (`Integrity.hs`)
+### 4. `Plutarch.Core.Integrity` (`Integrity.hs`)
 - **Purpose**: Utilities for verifying the correctness of the BuiltinData encoding of various types.
 
-### 6. `Plutarch.Core.List` (`List.hs`)
+### 5. `Plutarch.Core.List` (`List.hs`)
 - **Purpose**: Specialized high efficiency list operations.
 
-### 7. `Plutarch.Core.PByteString` (`PByteString.hs`)
+### 6. `Plutarch.Core.PByteString` (`PByteString.hs`)
 - **Purpose**: ByteString manipulation utilities.
 
-### 8. `Plutarch.Core.Time` (`Time.hs`)
+### 7. `Plutarch.Core.Time` (`Time.hs`)
 - **Purpose**: Functions for working with time ranges and intervals.
 
-### 9. `Plutarch.Core.Unroll` (`Unroll.hs`)
+### 8. `Plutarch.Core.Unroll` (`Unroll.hs`)
 - **Purpose**: Recursive function unrolling strategies (very strong optimization tool).
 
-### 10. `Plutarch.Core.Value` (`Value.hs`)
+### 9. `Plutarch.Core.Value` (`Value.hs`)
 - **Purpose**: `PValue` operations, including currency manipulations.
 
-### 11. `Plutarch.Core.Utils` (`Utils.hs`)
+### 10. `Plutarch.Core.Utils` (`Utils.hs`)
 - **Purpose**: General purpose smart contract utilities. 
 ---
 

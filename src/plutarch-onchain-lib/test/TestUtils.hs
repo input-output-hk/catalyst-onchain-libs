@@ -1,7 +1,6 @@
 module TestUtils (testEval) where
 import Data.Text qualified as Text
 import Plutarch.Internal.Term
-import Plutarch.Prelude
 import Plutarch.Test.Unit (TermResult (..), evalTermResult)
 import Test.Tasty
 import Test.Tasty.HUnit
