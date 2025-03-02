@@ -335,12 +335,6 @@ pand'List ts' =
     [] -> pconstant True
     ts -> foldl1 (\res x -> pand' # res # x) ts
 
--- Metaprogramming Example
--- This function was merged into Plutarch.
--- pcond ::  [(Term s PBool, Term s a)] -> Term s a -> Term s a
--- pcond [] def                  = def
--- pcond ((cond, x) : conds) def = pif cond x $ pcond conds def
-
 (#/=) :: (PEq t) => Term s t -> Term s t -> Term s PBool
 a #/= b = pnot # (a #== b)
 infix 4 #/=
