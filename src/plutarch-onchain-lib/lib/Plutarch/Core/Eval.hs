@@ -21,33 +21,31 @@ module Plutarch.Core.Eval(
   calcBudgetNoTraces,
   ) where
 
-import qualified Cardano.Binary              as CBOR
-import           Data.Aeson                  (KeyValue ((.=)), object)
-import           Data.Aeson.Encode.Pretty    (encodePretty)
-import           Data.Bifunctor              (first)
-import qualified Data.ByteString             as BS
-import qualified Data.ByteString.Base16      as Base16
-import qualified Data.ByteString.Lazy        as LBS
-import           Data.ByteString.Short       (toShort)
-import           Data.Char                   (toLower)
-import           Data.Text                   (Text, pack, unpack)
-import qualified Data.Text                   as T
-import qualified Data.Text.Encoding          as Text
-import qualified Data.Text.IO
-import           Data.Word                   (Word8)
-import           Plutarch.Pretty             (prettyScript)                                            
-import           Plutarch.Evaluate           (applyArguments, evalScript,
-                                              evalScriptHuge)
-import           Plutarch.Prelude
-import           Plutarch.Script             (Script, deserialiseScript,
-                                              serialiseScript)
-import           PlutusLedgerApi.V2          (BuiltinByteString, Data, ExBudget)
-import qualified PlutusTx.Prelude            as P
-import           Prettyprinter               (defaultLayoutOptions,
-                                              layoutPretty)
-import           Prettyprinter.Render.String (renderString)
-import           Test.Tasty.HUnit            (HasCallStack)
-import          Plutarch.Internal.Term       (Config(..), TracingMode(..), LogLevel (..), compile)
+import Cardano.Binary qualified as CBOR
+import Data.Aeson (KeyValue ((.=)), object)
+import Data.Aeson.Encode.Pretty (encodePretty)
+import Data.Bifunctor (first)
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as Base16
+import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Short (toShort)
+import Data.Char (toLower)
+import Data.Text (Text, pack, unpack)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
+import Data.Text.IO qualified
+import Data.Word (Word8)
+import Plutarch.Evaluate (applyArguments, evalScript, evalScriptHuge)
+import Plutarch.Internal.Term (Config (..), LogLevel (..), TracingMode (..),
+                               compile)
+import Plutarch.Prelude (ClosedTerm)
+import Plutarch.Pretty (prettyScript)
+import Plutarch.Script (Script, deserialiseScript, serialiseScript)
+import PlutusLedgerApi.V2 (BuiltinByteString, Data, ExBudget)
+import PlutusTx.Prelude qualified as P
+import Prettyprinter (defaultLayoutOptions, layoutPretty)
+import Prettyprinter.Render.String (renderString)
+import Test.Tasty.HUnit (HasCallStack)
 
 encodeSerialiseCBOR :: Script -> Text
 encodeSerialiseCBOR = Text.decodeUtf8 . Base16.encode . CBOR.serialize' . serialiseScript
@@ -65,11 +63,11 @@ evalWithArgsT cfg x args = do
 calcBudgetNoTraces :: ClosedTerm a -> [Data] -> ExBudget
 calcBudgetNoTraces x args =
   let cmp = compile NoTracing x
-  in  case cmp of 
+  in  case cmp of
         Left e -> error $ "Failed to compile term: " <> show e
-        Right scr -> 
+        Right scr ->
           let (_, budg, _) = evalScript $ applyArguments scr args
-          in budg 
+          in budg
 
 writePlutusScript :: Config -> String -> FilePath -> ClosedTerm a -> IO ()
 writePlutusScript cfg title filepath term = do

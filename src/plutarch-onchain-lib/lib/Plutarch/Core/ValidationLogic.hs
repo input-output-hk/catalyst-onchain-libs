@@ -12,16 +12,23 @@ module Plutarch.Core.ValidationLogic (
   , pinputsFromCredential
 ) where
 
+import Plutarch.Core.Context (paddressCredential, ptxInInfoResolved,
+                              ptxOutCredential)
 import Plutarch.Core.List (pdropFast)
 import Plutarch.Core.Utils (pand'List)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
                               PCredential (..), PRedeemer, PScriptPurpose,
                               PTxInInfo, PTxOut (..), PValue)
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, PAsData, PBool, PBuiltinList, PBuiltinPair,
+                         PEq ((#==)), PInteger, PList,
+                         PListLike (pcons, pelimList, phead, pnil, ptail),
+                         PUnit, S, Term, pasConstr, pconstant, perror, pfix,
+                         pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
+                         pif, plam, plet, pmatch, pnot, pto, type (:-->), (#$),
+                         (#))
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusLedgerApi.V3 (Value)
-import Plutarch.Core.Context (ptxOutCredential, ptxInInfoResolved, paddressCredential)
 
 {- | Check that there is exactly n spend plutus scripts executed in the transaction via the txInfoRedeemers list.
     Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
@@ -68,14 +75,14 @@ pcountSpendRedeemers rdmrs =
      in go # 0 # pto rdmrs
 
 -- | Count the number of script inputs in the transaction inputs list.
-pcountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
+pcountScriptInputs :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 pcountScriptInputs =
   phoistAcyclic $
-    let go :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
+    let go :: Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
         go = pfix #$ plam $ \self n ->
               pelimList
                 (\x xs ->
-                  let cred = ptxOutCredential $ ptxInInfoResolved x
+                  let cred = ptxOutCredential $ ptxInInfoResolved (pfromData x)
                    in pmatch cred $ \case
                         PScriptCredential _ -> self # (n + 1) # xs
                         _ -> self # n # xs

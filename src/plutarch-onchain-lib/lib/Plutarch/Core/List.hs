@@ -33,7 +33,14 @@ import Data.List (foldl')
 import Plutarch.Core.Internal.Builtins (pcountSetBits', pindexBS', pwriteBits')
 import Plutarch.Internal.Term (PType)
 import Plutarch.Monadic qualified as P
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, PAsData, PBool (..), PBuiltinList (..),
+                         PByteString, PData, PEq ((#==)), PInteger, PIsListLike,
+                         PListLike (PElemConstraint, pcons, pelimList, phead, pnil, ptail),
+                         PMultiplicativeSemigroup ((#*)), POrd ((#<), (#<=)),
+                         PPair (..), S, Term, pcon, pconcat, pcond, pconsBS,
+                         pconstant, perror, pfix, pforgetData, phexByteStr,
+                         phoistAcyclic, pif, plam, plet, pmatch, pmod, precList,
+                         ptraceInfoError, type (:-->), (#$), (#), (#>))
 import Prelude
 
 -- | Metaprogramming utility that translates to n applications of ptail

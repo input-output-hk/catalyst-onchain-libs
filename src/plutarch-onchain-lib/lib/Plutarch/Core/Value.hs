@@ -2,6 +2,7 @@
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE QualifiedDo           #-}
@@ -23,9 +24,9 @@ module Plutarch.Core.Value (
   ponlyLovelaceValueOf,
   plovelaceValueOfFast,
   ponlyAsset,
-  pvalueOfOneScott,
+  phasSingleTokenNoData,
+  phasSingleToken,
   pfirstTokenNameWithCS,
-  pvalueOfOne,
   ptryLookupValue,
   pfilterCSFromValue,
   pvalueContains,
@@ -34,6 +35,7 @@ module Plutarch.Core.Value (
   pstripAdaSafe,
   pstripAda,
   ptrySingleTokenCS,
+  pupdateAdaInValue,
 ) where
 
 import GHC.Generics (Generic)
@@ -48,7 +50,23 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
 import Plutarch.LedgerApi.Value (padaSymbol, padaSymbolData, pnormalize,
                                  pvalueOf)
 import Plutarch.LedgerApi.Value qualified as Value
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, DerivePlutusType (..), PAsData, PBool,
+                         PBuiltinList, PBuiltinPair, PByteString, PEq (..),
+                         PInteger,
+                         PListLike (pcons, pelimList, phead, pnil, ptail),
+                         POrd ((#<=)), PShow, PlutusType, PlutusTypeScott, S,
+                         Term, pall, pany, pcon, pconstant, pdata, pelem,
+                         perror, pfilter, pfix, pfoldl, pforgetData, pfromData,
+                         pfstBuiltin, phoistAcyclic, pif, plam, plength, plet,
+                         pmap, pmatch, ppairDataBuiltin, precList, psndBuiltin,
+                         pto, type (:-->), (#$), (#))
+import PlutusLedgerApi.V1 (TokenName (..))
+
+adaTokenName :: TokenName
+adaTokenName = TokenName ""
+
+padaTokenData :: ClosedTerm (PAsData PTokenName)
+padaTokenData = pconstant adaTokenName
 
 {- | Finds the associated Currency symbols that contain token names prefixed with the ByteString.
 -}
@@ -219,7 +237,7 @@ ponlyAsset = phoistAcyclic $
             pcon (PTriple (pfromData (pfstBuiltin # valuePair)) (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
 
 -- | Check that the provided value contains exactly one token of the given currency symbol.
-pvalueOfOneScott ::
+phasSingleTokenNoData ::
   forall
     (keys :: KeyGuarantees)
     (amounts :: AmountGuarantees)
@@ -230,7 +248,7 @@ pvalueOfOneScott ::
         :--> PValue keys amounts
         :--> PBool
     )
-pvalueOfOneScott = phoistAcyclic $
+phasSingleTokenNoData = phoistAcyclic $
   plam $ \policyId val ->
     pmatch val $ \(PValue val') ->
       precList
@@ -270,7 +288,7 @@ pfirstTokenNameWithCS = phoistAcyclic $
 -- | Check that a value contains exactly one token of a given currency symbol
 -- and no other tokens with that currency symbol.
 -- Errors if other tokens with the same currency symbol are present.
-pvalueOfOne ::
+phasSingleToken ::
   forall
     (keys :: KeyGuarantees)
     (amounts :: AmountGuarantees)
@@ -281,7 +299,7 @@ pvalueOfOne ::
         :--> PValue keys amounts
         :--> PBool
     )
-pvalueOfOne = phoistAcyclic $
+phasSingleToken = phoistAcyclic $
   plam $ \policyId val ->
     pmatch val $ \(PValue val') ->
       precList
@@ -511,4 +529,17 @@ pstripAda ::
 pstripAda = phoistAcyclic $
   plam $ \value ->
     let nonAdaValueMapInner = ptail # pto (pto value)
+    in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)
+
+-- | Update ada quantity in a value
+-- Importantly this function assumes that the Value is provided by the ledger (i.e. via the ScriptContext)
+-- and thus the invariant that Ada is the first entry in the Value is maintained.
+pupdateAdaInValue ::
+  forall (v :: AmountGuarantees) (s :: S).
+  Term s (PInteger :--> PValue 'Sorted v :--> PValue 'Sorted v)
+pupdateAdaInValue = phoistAcyclic $
+  plam $ \amnt value ->
+    let innerAdaMap = pcons @PBuiltinList # (ppairDataBuiltin # padaTokenData # pdata amnt) # pnil
+        adaEntry = punsafeCoerce $ ppairDataBuiltinRaw # pforgetData padaSymbolData #$ pmapData # punsafeCoerce innerAdaMap
+        nonAdaValueMapInner = punsafeCoerce $ pcons # adaEntry # (ptail # pto (pto value))
     in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)

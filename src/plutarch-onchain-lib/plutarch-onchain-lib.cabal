@@ -3,7 +3,7 @@ name:          plutarch-onchain-lib
 version:       0.3.0.0
 synopsis:      High-performance onchain-library for plutarch
 license:       Apache-2.0
-license-files: LICENSE
+license-file:  LICENSE
 maintainer:    j-mueller@users.noreply.github.com
 author:        Djed team @ IOG
 homepage:      https://github.com/input-output-hk/catalyst-onchain-libs
@@ -52,7 +52,6 @@ library
   exposed-modules:
     Plutarch.Core.Context
     Plutarch.Core.Crypto
-    Plutarch.Core.Data
     Plutarch.Core.Eval
     Plutarch.Core.Integrity
     Plutarch.Core.Internal.Builtins

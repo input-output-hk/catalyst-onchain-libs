@@ -25,6 +25,7 @@ import PlutusLedgerApi.V3 (Datum (..), OutputDatum (NoOutputDatum),
                            ScriptInfo (SpendingScript), ScriptPurpose (..),
                            TxId (..), TxInInfo (..), TxInfo (..), TxOut (..),
                            TxOutRef (..), always)
+import PlutusLedgerApi.V3.MintValue (emptyMintValue)
 import PlutusTx qualified
 import PlutusTx.AssocMap qualified as Map
 import Test.Tasty (TestTree, testGroup)
@@ -37,9 +38,6 @@ _mkScriptContext i =
     (mkTxInfo i)
     (Redeemer (PlutusTx.toBuiltinData (1 :: Integer)))
     (SpendingScript (TxOutRef (TxId "") 0) (Just (Datum $ PlutusTx.toBuiltinData @Integer 1)))
-
-emptyMintValue :: Value
-emptyMintValue = mempty
 
 mkRedeemer :: Integer -> Redeemer
 mkRedeemer i = Redeemer (PlutusTx.toBuiltinData i)
@@ -149,17 +147,17 @@ unrollLengthBound = punrollBound' 200 (const $ plam $ \_ -> pconstant (-1)) go 0
       Term s (list a :--> PInteger)
     go self n = plam $ pelimList (\_ xs -> self (n + 1) # xs) (pconstant n)
 
-punrolledCountScriptInputs :: Term s (PBuiltinList PTxInInfo :--> PInteger)
+punrolledCountScriptInputs :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 punrolledCountScriptInputs = punrollBound' 100 (const def) go () # 0
   where
-    def :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
+    def :: Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
     def = plam $ \_ _ -> -1
 
-    go :: (() -> Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)) -> () -> Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
+    go :: (() -> Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)) -> () -> Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
     go self () = plam $ \n ->
       pelimList
         (\x xs' ->
-          let cred = ptxOutCredential $ ptxInInfoResolved x --pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
+          let cred = ptxOutCredential $ ptxInInfoResolved $ pfromData x --pfield @"credential" # (pfield @"address" # (pfield @"resolved" # x))
               count = pmatch cred $ \case
                 PScriptCredential _ -> (n + 1)
                 _ -> n
@@ -167,14 +165,14 @@ punrolledCountScriptInputs = punrollBound' 100 (const def) go () # 0
         )
         n
 
-punrolledCountScriptInputsUnboundWhole :: Term s (PBuiltinList PTxInInfo :--> PInteger)
+punrolledCountScriptInputsUnboundWhole :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 punrolledCountScriptInputsUnboundWhole = punrollUnboundWhole 20 go #$ 0
   where
-    go :: Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger) -> Term s (PInteger :--> PBuiltinList PTxInInfo :--> PInteger)
+    go :: Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger) -> Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
     go self = plam $ \n ->
       pelimList
         (\x xs' ->
-          let cred = ptxOutCredential $ ptxInInfoResolved x
+          let cred = ptxOutCredential $ ptxInInfoResolved $ pfromData x
               count = pmatch cred $ \case
                 PScriptCredential _ -> (n + 1)
                 _ -> n
@@ -186,9 +184,9 @@ unrollBench :: [TestTree]
 unrollBench =
   [ bench "bounded-unroll length" $ unrollLengthBound # pconstant @(PBuiltinList PInteger) [1..200]
   , bench "no-unroll recursive length" $ plength # pconstant @(PBuiltinList PInteger) [1..200]
-  , bench "bounded-unroll count script inputs" (punrolledCountScriptInputs # pconstant @(PBuiltinList PTxInInfo) exampleTxInputs)
-  , bench "no-unroll count script inputs" (pcountScriptInputs # pconstant @(PBuiltinList PTxInInfo) exampleTxInputs)
-  , bench "unbounded-whole-unroll length" $ punrolledCountScriptInputsUnboundWhole # pconstant @(PBuiltinList PTxInInfo) exampleTxInputs
+  , bench "bounded-unroll count script inputs" (punrolledCountScriptInputs # pconstant @(PBuiltinList (PAsData PTxInInfo)) exampleTxInputs)
+  , bench "no-unroll count script inputs" (pcountScriptInputs # pconstant @(PBuiltinList (PAsData PTxInInfo)) exampleTxInputs)
+  , bench "unbounded-whole-unroll length" $ punrolledCountScriptInputsUnboundWhole # pconstant @(PBuiltinList (PAsData PTxInInfo)) exampleTxInputs
   ]
 
 integerBitMaskBenches :: [TestTree]
