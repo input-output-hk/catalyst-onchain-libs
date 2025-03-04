@@ -7,10 +7,11 @@ Stability   : experimental
 -}
 
 module Plutarch.Core.PByteString (
-  pisPrefixOf
-, pisPrefixedWith
-, ptakeBS
-, pdropBS) where
+  pisPrefixOf,
+  pisPrefixedWith,
+  ptakeBS,
+  pdropBS,
+) where
 
 import Plutarch.LedgerApi.Value (PTokenName)
 import Plutarch.Prelude
