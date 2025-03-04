@@ -4,11 +4,20 @@ module Plutarch.Core.Integrity (
   pisScriptCredential,
   pisPubKeyCredential,
   pdeserializeCredential,
+  pisVotingScript,
+  pisProposingScript,
+  pisCertifyingScript,
+  pisMintingScript,
+  pisSpendingScript,
+  pisRewardingScript,
 ) where
 
-import Plutarch.Core.List
-import Plutarch.Prelude
-import Plutarch.LedgerApi.V3 (PCredential)
+import Plutarch.Core.List (pheadSingleton)
+import Plutarch.LedgerApi.V3 (PCredential, PScriptInfo)
+import Plutarch.Prelude (PAsData, PBool, PEq ((#==)), Term, pasByteStr,
+                         pasConstr, pcond, perror, pforgetData, pfstBuiltin,
+                         pif, plengthBS, plet, psndBuiltin, ptraceInfoError,
+                         (#))
 
 -- | Check that a data-encoded Credential is a ScriptCredential.
 -- This does not guarantee that the data-encoded term is structurally a valid Credential.
@@ -40,3 +49,27 @@ pdeserializeCredential term =
               (ptraceInfoError "Invalid credential")
           )
           perror
+
+-- | Check the script info to determine if the script is being executed as a minting script.
+pisMintingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisMintingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 0
+
+-- | Check the script info to determine if the script is being executed as a spending script.
+pisSpendingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisSpendingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 1
+
+-- | Check the script info to determine if the script is being executed as a rewarding script.
+pisRewardingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisRewardingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
+
+-- | Check the script info to determine if the script is being executed as a certifying script.
+pisCertifyingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisCertifyingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 3
+
+-- | Check the script info to determine if the script is being executed as a voting script.
+pisVotingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
+
+-- | Check the script info to determine if the script is being executed as a proposing script.
+pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5

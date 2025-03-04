@@ -18,7 +18,6 @@ module Plutarch.Core.Utils(
   pfail,
   pdebug,
   PTxOutH(..),
-  pmatchInlineDatum,
   ppair,
   passert,
   pcheck,
@@ -48,18 +47,26 @@ module Plutarch.Core.Utils(
   pmapAndConvertList,
   pintToByteString,
   pdivCeil,
-  pisVotingScript,
-  pisProposingScript,
-  pisCertifyingScript,
-  pisMintingScript,
-  pisSpendingScript,
-  pisRewardingScript,
 ) where
 
 import Data.Text qualified as T
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, PAdditiveGroup ((#-)), PAsData,
+                         PBool (PFalse), PBuiltinList, PByteString, PEq (..),
+                         PInteger, PIsListLike, PListLike (..), PMaybe (..),
+                         PPair (..), PString, S, Term, TermCont, pand', pany,
+                         pcon, pcond, pconstant, pdiv, pelem, perror, pfix,
+                         pfromData, phoistAcyclic, pif, plam, plet, pmatch,
+                         pnot, pquot, precList, prem, ptraceInfoError, tcont,
+                         type (:-->), (#$), (#&&), (#), (#>), (#>=))
 
-import Plutarch.LedgerApi.V3
+import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
+                              KeyGuarantees (Sorted),
+                              PAddress (paddress'credential),
+                              PCredential (PPubKeyCredential, PScriptCredential),
+                              PMaybeData, POutputDatum, PPubKeyHash,
+                              PScriptHash, PTxInInfo (..),
+                              PTxOut (PTxOut, ptxOut'address, ptxOut'value),
+                              PTxOutRef, PValue)
 import Plutarch.Monadic qualified as P
 
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
@@ -100,37 +107,6 @@ data PTxOutH (s :: S) =
     , ptxOutDatumH           :: Term s POutputDatum
     , ptxOutReferenceScriptH :: Term s (PMaybeData PScriptHash)
     }
-
--- | Check the script info to determine if the script is being executed as a minting script.
-pisMintingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisMintingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 0
-
--- | Check the script info to determine if the script is being executed as a spending script.
-pisSpendingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisSpendingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 1
-
--- | Check the script info to determine if the script is being executed as a rewarding script.
-pisRewardingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisRewardingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
-
--- | Check the script info to determine if the script is being executed as a certifying script.
-pisCertifyingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisCertifyingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 3
-
--- | Check the script info to determine if the script is being executed as a voting script.
-pisVotingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
-
--- | Check the script info to determine if the script is being executed as a proposing script.
-pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
-pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
-
-pmatchInlineDatum :: forall (s :: S). Term s (POutputDatum :--> PDatum)
-pmatchInlineDatum = phoistAcyclic $
-  plam $
-    flip pmatch $ \case
-      POutputDatum pdatum -> pdatum
-      _ -> ptraceInfoError "not an inline datum"
 
 ppair :: Term s a -> Term s b -> Term s (PPair a b)
 ppair a b = pcon (PPair a b)

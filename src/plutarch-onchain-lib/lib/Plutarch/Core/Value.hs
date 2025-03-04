@@ -50,7 +50,16 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
 import Plutarch.LedgerApi.Value (padaSymbol, padaSymbolData, pnormalize,
                                  pvalueOf)
 import Plutarch.LedgerApi.Value qualified as Value
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, DerivePlutusType (..), PAsData, PBool,
+                         PBuiltinList, PBuiltinPair, PByteString, PEq (..),
+                         PInteger,
+                         PListLike (pcons, pelimList, phead, pnil, ptail),
+                         POrd ((#<=)), PShow, PlutusType, PlutusTypeScott, S,
+                         Term, pall, pany, pcon, pconstant, pdata, pelem,
+                         perror, pfilter, pfix, pfoldl, pforgetData, pfromData,
+                         pfstBuiltin, phoistAcyclic, pif, plam, plength, plet,
+                         pmap, pmatch, ppairDataBuiltin, precList, psndBuiltin,
+                         pto, type (:-->), (#$), (#))
 import PlutusLedgerApi.V1 (TokenName (..))
 
 adaTokenName :: TokenName

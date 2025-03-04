@@ -20,7 +20,13 @@ import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
                               PCredential (..), PRedeemer, PScriptPurpose,
                               PTxInInfo, PTxOut (..), PValue)
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, PAsData, PBool, PBuiltinList, PBuiltinPair,
+                         PEq ((#==)), PInteger, PList,
+                         PListLike (pcons, pelimList, phead, pnil, ptail),
+                         PUnit, S, Term, pasConstr, pconstant, perror, pfix,
+                         pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
+                         pif, plam, plet, pmatch, pnot, pto, type (:-->), (#$),
+                         (#))
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusLedgerApi.V3 (Value)
 

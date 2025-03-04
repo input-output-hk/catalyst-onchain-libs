@@ -1,23 +1,24 @@
-{-# LANGUAGE QualifiedDo         #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE QualifiedDo    #-}
 module Plutarch.Core.Validators (
   mkNFTMinting,
   alwaysFailScript,
   mkPermissionedMinting,
 ) where
 
+import Plutarch.Core.Context (pscriptContextTxInfo, ptxInfoSignatories)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.Utils (phasUTxO, ptxSignedByPkh)
 import Plutarch.Core.ValidationLogic (pvalidateConditions)
 import Plutarch.Core.Value (ptryLookupValue)
-import Plutarch.Internal.Lift (pconstant)
-import Plutarch.LedgerApi.V3 (PPubKeyHash, PScriptContext (..), PTxOutRef, PTxInfo (PTxInfo), ptxInfo'mint, ptxInfo'inputs, PScriptInfo (..))
+import Plutarch.LedgerApi.V3 (PPubKeyHash, PScriptContext (..),
+                              PScriptInfo (..), PTxInfo (PTxInfo), PTxOutRef,
+                              ptxInfo'inputs, ptxInfo'mint)
 import Plutarch.Monadic qualified as P
-import Plutarch.Prelude (ClosedTerm, PAsData, PData, PEq ((#==)), PUnit, perror,
-                         pfromData, pfstBuiltin, plam, plet,
-                         psndBuiltin, type (:-->), (#), pmatch)
+import Plutarch.Prelude (ClosedTerm, PAsData, PData, PEq ((#==)), PUnit,
+                         pconstant, perror, pfromData, pfstBuiltin, plam, plet,
+                         pmatch, psndBuiltin, type (:-->), (#))
 import PlutusLedgerApi.V3 (TokenName)
-import Plutarch.Core.Context (pscriptContextTxInfo, ptxInfoSignatories)
 
 -- | A one-shot minting policy that allows minting a single token with a given token name.
 -- Arguments:
@@ -25,7 +26,7 @@ import Plutarch.Core.Context (pscriptContextTxInfo, ptxInfoSignatories)
 --   2. The UTxO reference of the protocol parameters UTxO.
 mkNFTMinting :: TokenName -> ClosedTerm (PTxOutRef :--> PScriptContext :--> PUnit)
 mkNFTMinting tn = plam $ \oref ctx -> P.do
-  PScriptContext {pscriptContext'txInfo, pscriptContext'scriptInfo} <- pmatch ctx 
+  PScriptContext {pscriptContext'txInfo, pscriptContext'scriptInfo} <- pmatch ctx
   PTxInfo {ptxInfo'inputs, ptxInfo'mint} <- pmatch pscriptContext'txInfo
   PMintingScript ownCS <- pmatch pscriptContext'scriptInfo
   mintedValue <- plet $ pfromData ptxInfo'mint

@@ -20,7 +20,9 @@ import Data.Word (Word8)
 import Plutarch.Builtin.Crypto (pblake2b_224, pkeccak_256)
 import Plutarch.Core.Internal.Builtins (pindexBS')
 import Plutarch.Core.PByteString (pdropBS, ptakeBS)
-import Plutarch.Prelude
+import Plutarch.Prelude (PByteString, PEq ((#==)), Term, pconstant,
+                         phoistAcyclic, pif, plam, plengthBS, plet, pmod,
+                         type (:-->), (#))
 import Plutarch.Script (Script (unScript))
 import PlutusCore.Crypto.Hash qualified as Hash
 import PlutusLedgerApi.Common (serialiseUPLC)

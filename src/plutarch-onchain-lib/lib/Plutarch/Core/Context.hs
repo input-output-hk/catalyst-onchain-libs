@@ -11,7 +11,6 @@ module Plutarch.Core.Context (
   ptxOutDatum,
   ) where
 
-import Plutarch.Internal.Other
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               PAddress (paddress'credential), PCredential,
@@ -22,7 +21,8 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               PTxOut (ptxOut'address, ptxOut'datum, ptxOut'value),
                               PTxOutRef, PValue, pscriptContext'txInfo,
                               ptxInfo'signatories)
-import Plutarch.Prelude (PAsData, PBuiltinList, PData, Term, perror, pmatch)
+import Plutarch.Prelude (PAsData, PBuiltinList, PData, Term, perror, pmatch,
+                         pto)
 
 paddressCredential :: Term s PAddress -> Term s PCredential
 paddressCredential addr =

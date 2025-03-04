@@ -19,7 +19,10 @@ import Plutarch.LedgerApi.V3 (PExtended (PFinite), PInterval (..),
                               PLowerBound (PLowerBound), PPosixTime (..),
                               PUpperBound (PUpperBound), unPPosixTime)
 import Plutarch.Monadic qualified as P
-import Plutarch.Prelude
+import Plutarch.Prelude (PAsData, PBool, PEq, PInteger, PShow, PlutusType, S,
+                         Term, TermCont, pand', pcon, pconstant, pfromData,
+                         phoistAcyclic, plam, pmatch, pmatchC, pto, type (:-->),
+                         (#))
 import Plutarch.Repr.SOP (DeriveAsSOPRec (DeriveAsSOPRec))
 import Plutarch.Unsafe (punsafeCoerce)
 

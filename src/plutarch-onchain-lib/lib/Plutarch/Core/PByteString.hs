@@ -14,7 +14,9 @@ module Plutarch.Core.PByteString (
 ) where
 
 import Plutarch.LedgerApi.Value (PTokenName)
-import Plutarch.Prelude
+import Plutarch.Prelude (ClosedTerm, PBool, PByteString, PEq ((#==)), PInteger,
+                         Term, phoistAcyclic, plam, plengthBS, psliceBS, pto,
+                         type (:-->), (#))
 
 -- | Checks if a tokenName is prefixed by a certain ByteString
 pisPrefixedWith :: ClosedTerm (PTokenName :--> PByteString :--> PBool)
