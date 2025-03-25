@@ -10,14 +10,13 @@ module Plutarch.Core.Integrity (
   pisMintingScript,
   pisSpendingScript,
   pisRewardingScript,
+  pfromJustData,
 ) where
 
 import Plutarch.Core.List (pheadSingleton)
-import Plutarch.LedgerApi.V3 (PCredential, PScriptInfo)
-import Plutarch.Prelude (PAsData, PBool, PEq ((#==)), Term, pasByteStr,
-                         pasConstr, pcond, perror, pforgetData, pfstBuiltin,
-                         pif, plengthBS, plet, psndBuiltin, ptraceInfoError,
-                         (#))
+import Plutarch.LedgerApi.V3 (PCredential, PMaybeData, PScriptInfo)
+import Plutarch.Prelude
+import Plutarch.Unsafe (punsafeCoerce)
 
 -- | Check that a data-encoded Credential is a ScriptCredential.
 -- This does not guarantee that the data-encoded term is structurally a valid Credential.
@@ -73,3 +72,7 @@ pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
 -- | Check the script info to determine if the script is being executed as a proposing script.
 pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
+
+pfromJustData :: Term s (PMaybeData a) -> Term s a
+pfromJustData term =
+  punsafeCoerce $ phead # (psndBuiltin # (pasConstr # pforgetData (pdata term)))

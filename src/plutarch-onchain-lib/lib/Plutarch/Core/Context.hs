@@ -9,25 +9,41 @@ module Plutarch.Core.Context (
   ptxInfoSignatories,
   ptxOutInlineDatumRaw,
   ptxOutDatum,
+  paddressStakingCredential,
+  paddressMaybeStakingCredential,
+  pconstructExpectedOutput,
+  pconstructExpectedOutputWithOutputDatum,
   ) where
 
+import Plutarch.Core.Integrity (pfromJustData)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
-                              PAddress (paddress'credential), PCredential,
+                              KeyGuarantees (Sorted),
+                              PAddress (paddress'credential, paddress'stakingCredential),
+                              PCredential, PDatum (PDatum), PMaybeData,
                               POutputDatum (POutputDatum), PPubKeyHash,
-                              PScriptContext,
+                              PScriptContext (pscriptContext'txInfo),
+                              PStakingCredential,
                               PTxInInfo (ptxInInfo'outRef, ptxInInfo'resolved),
-                              PTxInfo,
-                              PTxOut (ptxOut'address, ptxOut'datum, ptxOut'value),
-                              PTxOutRef, PValue, pscriptContext'txInfo,
-                              ptxInfo'signatories)
-import Plutarch.Prelude (PAsData, PBuiltinList, PData, Term, perror, pmatch,
-                         pto)
+                              PTxInfo (ptxInfo'signatories), PTxOut (..),
+                              PTxOutRef, PValue)
+import Plutarch.Prelude (PAsData, PBuiltinList, PData, Term, pcon, pconstant,
+                         pdata, perror, pmatch, pto)
 
 paddressCredential :: Term s PAddress -> Term s PCredential
 paddressCredential addr =
   pmatch addr $ \addr' ->
     paddress'credential addr'
+
+paddressMaybeStakingCredential :: Term s PAddress -> Term s (PMaybeData PStakingCredential)
+paddressMaybeStakingCredential addr =
+  pmatch addr $ \addr' ->
+    paddress'stakingCredential addr'
+
+paddressStakingCredential :: Term s PAddress -> Term s PStakingCredential
+paddressStakingCredential addr =
+  pmatch addr $ \addr' ->
+    pfromJustData $ paddress'stakingCredential addr'
 
 ptxOutAddress :: Term s PTxOut -> Term s PAddress
 ptxOutAddress =
@@ -74,3 +90,23 @@ ptxInfoSignatories :: Term s PTxInfo -> Term s (PAsData (PBuiltinList (PAsData P
 ptxInfoSignatories =
   flip pmatch $ \txInfo ->
     ptxInfo'signatories txInfo
+
+pconstructExpectedOutput :: Term s PAddress -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PData -> Term s (PAsData PTxOut)
+pconstructExpectedOutput address value datum =
+  pdata $ pcon $
+    PTxOut
+     { ptxOut'address = address
+     , ptxOut'value = value
+     , ptxOut'datum = pcon $ POutputDatum $ pcon $ PDatum datum
+     , ptxOut'referenceScript = pconstant Nothing
+     }
+
+pconstructExpectedOutputWithOutputDatum :: Term s PAddress -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s POutputDatum -> Term s (PAsData PTxOut)
+pconstructExpectedOutputWithOutputDatum address value datum =
+  pdata $ pcon $
+    PTxOut
+     { ptxOut'address = address
+     , ptxOut'value = value
+     , ptxOut'datum = datum
+     , ptxOut'referenceScript = pconstant Nothing
+     }
