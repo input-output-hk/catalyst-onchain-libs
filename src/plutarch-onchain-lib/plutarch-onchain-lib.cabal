@@ -13,6 +13,13 @@ description:
 
 build-type:    Simple
 
+flag log-debug
+  description:
+    Define DEBUG CPP macro via -DDEBUG to enable logging in offchain
+
+  default:     False
+  manual:      True
+
 common lang
   default-language:   Haskell2010
   default-extensions:
@@ -46,6 +53,9 @@ common lang
     -Wall -Wnoncanonical-monad-instances -Wunused-packages
     -Wincomplete-uni-patterns -Wincomplete-record-updates
     -Wredundant-constraints -Widentities
+
+  if flag(log-debug)
+    cpp-options: -DDEBUG
 
 library
   import:          lang

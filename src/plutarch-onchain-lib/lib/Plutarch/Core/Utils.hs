@@ -17,6 +17,7 @@ Stability   : experimental
 module Plutarch.Core.Utils(
   pfail,
   pdebug,
+  pdebugWithPrefix,
   PTxOutH(..),
   ppair,
   passert,
@@ -69,6 +70,7 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               PTxOutRef, PValue)
 import Plutarch.Monadic qualified as P
 
+import Data.Kind (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
                               ptxOutCredential)
 import Plutarch.Core.Value (pvalueContains)
@@ -97,6 +99,22 @@ pdebug = ptraceInfoIfFalse
 --- ^ Use this version for testing. You will need modify node parameters to not blow up on TxSize/Exunits
 #else
 pdebug _ b = b
+--- ^ Use this version for production. Smaller script size/exunits, but you won't get debugging messages
+#endif
+
+pdebugWithPrefix ::
+  forall (a :: S -> Type) (s :: S).
+#ifdef DEBUG
+  PShow a =>
+#endif
+  Term s PString ->
+  Term s a ->
+  Term s a
+#ifdef DEBUG
+pdebugWithPrefix = ptraceInfoWithPrefix
+--- ^ Use this version for testing. You will need modify node parameters to not blow up on TxSize/Exunits
+#else
+pdebugWithPrefix _ b = b
 --- ^ Use this version for production. Smaller script size/exunits, but you won't get debugging messages
 #endif
 

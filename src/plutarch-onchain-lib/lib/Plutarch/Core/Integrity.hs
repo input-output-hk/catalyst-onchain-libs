@@ -10,6 +10,7 @@ module Plutarch.Core.Integrity (
   pisMintingScript,
   pisSpendingScript,
   pisRewardingScript,
+  pisSpendingPurpose,
   pfromJustData,
 ) where
 
@@ -72,6 +73,10 @@ pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
 -- | Check the script info to determine if the script is being executed as a proposing script.
 pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
+
+-- | Check that the ScriptPurpose is a spending purpose.
+pisSpendingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisSpendingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 1
 
 pfromJustData :: Term s (PMaybeData a) -> Term s a
 pfromJustData term =

@@ -9,6 +9,7 @@ module Plutarch.Core.Context (
   ptxInfoSignatories,
   ptxOutInlineDatumRaw,
   ptxOutDatum,
+  ptryInlineDatum,
   paddressStakingCredential,
   paddressMaybeStakingCredential,
   pconstructExpectedOutput,
@@ -29,6 +30,12 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               PTxOutRef, PValue)
 import Plutarch.Prelude (PAsData, PBuiltinList, PData, Term, pcon, pconstant,
                          pdata, perror, pmatch, pto)
+
+ptryInlineDatum :: Term s POutputDatum -> Term s PData
+ptryInlineDatum =
+  flip pmatch $ \case
+     (POutputDatum d) -> (pto d)
+     _ -> perror
 
 paddressCredential :: Term s PAddress -> Term s PCredential
 paddressCredential addr =
