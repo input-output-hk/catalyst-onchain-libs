@@ -69,7 +69,6 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               PTxOut (PTxOut, ptxOut'address, ptxOut'value),
                               PTxOutRef, PValue)
 import Plutarch.Monadic qualified as P
-
 import Data.Kind (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
                               ptxOutCredential)
