@@ -15,8 +15,6 @@ Stability   : experimental
 -}
 
 module Plutarch.Core.Utils(
-  pfail,
-  pdebug,
   PTxOutH(..),
   ppair,
   passert,
@@ -53,12 +51,16 @@ import Data.Text qualified as T
 import Plutarch.Prelude (ClosedTerm, PAdditiveGroup ((#-)), PAsData,
                          PBool (PFalse), PBuiltinList, PByteString, PEq (..),
                          PInteger, PIsListLike, PListLike (..), PMaybe (..),
-                         PPair (..), PString, S, Term, TermCont, pand', pany,
-                         pcon, pcond, pconstant, pdiv, pelem, perror, pfix,
-                         pfromData, phoistAcyclic, pif, plam, plet, pmatch,
-                         pnot, pquot, precList, prem, ptraceInfoError, tcont,
-                         type (:-->), (#$), (#&&), (#), (#>), (#>=))
+                         PPair (..), S, Term, TermCont, pand', pany, pcon,
+                         pcond, pconstant, pdiv, pelem, perror, pfix, pfromData,
+                         phoistAcyclic, pif, plam, plet, pmatch, pnot, pquot,
+                         precList, prem, ptraceInfoError, tcont, type (:-->),
+                         (#$), (#&&), (#), (#>), (#>=))
 
+import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
+                              ptxOutCredential)
+import Plutarch.Core.Value (pvalueContains)
+import Plutarch.Internal.Term (PType)
 import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               KeyGuarantees (Sorted),
                               PAddress (paddress'credential),
@@ -68,37 +70,7 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               PTxOut (PTxOut, ptxOut'address, ptxOut'value),
                               PTxOutRef, PValue)
 import Plutarch.Monadic qualified as P
-
-import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
-                              ptxOutCredential)
-import Plutarch.Core.Value (pvalueContains)
-import Plutarch.Internal.Term (PType)
 import Prelude
-
-pfail ::
-  forall (s :: S) a.
-  Term s PString ->
-  Term s a
-#ifdef DEBUG
-pfail = ptraceInfoError
-#else
---- ^ Use this version for production. Smaller script size/exunits, but you won't get debugging messages
-pfail _ = perror
-#endif
---- ^ Use this version for testing. You will need modify node parameters to not blow up on TxSize/Exunits
-
-pdebug ::
-  forall (s :: S).
-  Term s PString ->
-  Term s PBool ->
-  Term s PBool
-#ifdef DEBUG
-pdebug = ptraceInfoIfFalse
---- ^ Use this version for testing. You will need modify node parameters to not blow up on TxSize/Exunits
-#else
-pdebug _ b = b
---- ^ Use this version for production. Smaller script size/exunits, but you won't get debugging messages
-#endif
 
 data PTxOutH (s :: S) =
   PTxOutH

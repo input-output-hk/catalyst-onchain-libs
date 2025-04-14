@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+
 {-|
 Module      : Plutarch.Core.Crypto
 Description : Plutarch functions for working with cryptographic values
@@ -10,19 +12,23 @@ module Plutarch.Core.Crypto(
   pcardanoPubKeyToPubKeyHash,
   pethereumPubKeyToPubKeyHash,
   pcompressPublicKey,
-  scriptHashV3
+  scriptHashV3,
+  papplyHashedParameterV3
 ) where
 
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Short (fromShort)
 import Data.Word (Word8)
+import Plutarch.Builtin.ByteString (pintegerToByteString, pmostSignificantFirst)
 import Plutarch.Builtin.Crypto (pblake2b_224, pkeccak_256)
 import Plutarch.Core.Internal.Builtins (pindexBS')
 import Plutarch.Core.PByteString (pdropBS, ptakeBS)
-import Plutarch.Prelude (PByteString, PEq ((#==)), Term, pconstant,
-                         phoistAcyclic, pif, plam, plengthBS, plet, pmod,
-                         type (:-->), (#))
+import Plutarch.Evaluate (unsafeEvalTerm)
+import Plutarch.Internal.Term (Config (NoTracing))
+import Plutarch.Prelude (ClosedTerm, PByteString, PEq ((#==)), PInteger, Term,
+                         pconstant, phexByteStr, phoistAcyclic, pif, plam,
+                         plengthBS, plet, pmod, type (:-->), (#))
 import Plutarch.Script (Script (unScript))
 import PlutusCore.Crypto.Hash qualified as Hash
 import PlutusLedgerApi.Common (serialiseUPLC)
@@ -60,3 +66,39 @@ pcompressPublicKey pubKey =
   where
     yCoordinate = pdropBS # 32 # pubKey
     peven bs = (pmod # (pindexBS' # bs # 31) # 2) #== 0
+
+-- | Given the CBOR-hex prefix of a parameterized Plutus script and a hashed parameter,
+-- returns the hash of the full CBOR-hex representation after the parameter is applied.
+--
+-- This is useful for the "on-chain parameter validation" design pattern.
+--
+-- Suppose you have a Plutus script that accepts a parameter, and you deploy multiple
+-- instances of it with different parameters. This function allows you to compute the
+-- script hash of an instance — given the common prefix (up to the parameter) and the
+-- hash of the specific parameter.
+--
+-- This is useful for verifying whether a known script hash corresponds to a specific
+-- instantiation of a parameterized contract. You compute the expected hash using this
+-- function and compare it to the one you want to validate. If they match, you know
+-- the script is indeed the original contract with the given parameter applied.
+--
+-- This assumes the underlying script is PlutusV3.
+papplyHashedParameterV3 :: forall s.
+  Term s PByteString
+  -> Term s PByteString
+  -> Term s PByteString
+papplyHashedParameterV3 prefix hashedParam =
+  pblake2b_224 # (scriptHeader <> postfix)
+  where
+    postfix :: ClosedTerm PByteString
+    postfix = phexByteStr "0001"
+
+    versionHeader :: Term s PByteString
+    versionHeader = unsafeEvalTerm NoTracing (pintegerToByteString # pmostSignificantFirst # 1 # plutusVersion)
+
+    plutusVersion :: ClosedTerm PInteger
+    plutusVersion = pconstant 3
+
+    scriptHeader :: Term s PByteString
+    scriptHeader = versionHeader <> prefix <> hashedParam
+

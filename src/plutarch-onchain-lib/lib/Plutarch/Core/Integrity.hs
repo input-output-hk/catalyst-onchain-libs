@@ -10,14 +10,19 @@ module Plutarch.Core.Integrity (
   pisMintingScript,
   pisSpendingScript,
   pisRewardingScript,
+  pisMintingPurpose,
+  pisSpendingPurpose,
+  pisRewardingPurpose,
+  pisCertifyingPurpose,
+  pisVotingPurpose,
+  pisProposingPurpose,
+  pfromJustData,
 ) where
 
 import Plutarch.Core.List (pheadSingleton)
-import Plutarch.LedgerApi.V3 (PCredential, PScriptInfo)
-import Plutarch.Prelude (PAsData, PBool, PEq ((#==)), Term, pasByteStr,
-                         pasConstr, pcond, perror, pforgetData, pfstBuiltin,
-                         pif, plengthBS, plet, psndBuiltin, ptraceInfoError,
-                         (#))
+import Plutarch.LedgerApi.V3 (PCredential, PMaybeData, PScriptInfo)
+import Plutarch.Prelude
+import Plutarch.Unsafe (punsafeCoerce)
 
 -- | Check that a data-encoded Credential is a ScriptCredential.
 -- This does not guarantee that the data-encoded term is structurally a valid Credential.
@@ -73,3 +78,31 @@ pisVotingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
 -- | Check the script info to determine if the script is being executed as a proposing script.
 pisProposingScript :: Term s (PAsData PScriptInfo) -> Term s PBool
 pisProposingScript term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
+
+-- | Check that the ScriptPurpose is a minting purpose.
+pisMintingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisMintingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 0
+
+-- | Check that the ScriptPurpose is a spending purpose.
+pisSpendingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisSpendingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 1
+
+-- | Check that the ScriptPurpose is a rewarding purpose.
+pisRewardingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisRewardingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 2
+
+-- | Check that the ScriptPurpose is a certifying purpose.
+pisCertifyingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisCertifyingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 3
+
+-- | Check that the ScriptPurpose is a voting purpose.
+pisVotingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisVotingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 4
+
+-- | Check that the ScriptPurpose is a proposing purpose.
+pisProposingPurpose :: Term s (PAsData PScriptInfo) -> Term s PBool
+pisProposingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
+
+pfromJustData :: Term s (PMaybeData a) -> Term s a
+pfromJustData term =
+  punsafeCoerce $ phead # (psndBuiltin # (pasConstr # pforgetData (pdata term)))
