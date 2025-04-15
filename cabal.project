@@ -15,27 +15,19 @@ repository cardano-haskell-packages
     d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
 
 index-state:
-  , hackage.haskell.org 2025-02-14T16:51:26Z
-  , cardano-haskell-packages 2025-02-14T16:51:26Z
+  , hackage.haskell.org 2025-04-08T16:51:26Z
+  , cardano-haskell-packages 2025-04-08T16:51:26Z
 
 with-compiler: ghc-9.6.6
 
 packages:
     src/plutarch-onchain-lib
 
-constraints:
-  plutus-core == 1.37.0.0
-
-allow-older:
-  -- NOTE: Currently, plutarch depends on plutus-core version 1.40, while the rest of the (cardano) world is at 1.37.
-  -- TODO: Delete when plutarch is moving to 1.37
-  plutarch:plutus-core
-
 source-repository-package
     type: git
     location: https://github.com/Plutonomicon/plutarch-plutus
-    tag: 7002ce59642daa3fff9c720cf3076844ac81ac26
-    --sha256: sha256-9FR+VOUCyA0/0oHqV/m6fUXBprD9AIgrUZU0jD3f9hQ=
+    tag: f84a46287b06f36abf8d2d63bec7ff75d32f3e91
+    --sha256: sha256-gKBk9D6DHSEudq7P9+07yXWcgM/QX7NFp0tJXBodopM=
     subdir:
       .
       plutarch-ledger-api

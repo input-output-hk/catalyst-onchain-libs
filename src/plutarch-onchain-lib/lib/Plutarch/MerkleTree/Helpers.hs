@@ -12,10 +12,10 @@ module Plutarch.MerkleTree.Helpers(
   pnibble
 ) where
 
-import qualified Data.ByteString     as BS
-import           Plutarch.Core.Internal.Builtins (pindexBS', pconsBS')
-import           Plutarch.Builtin.Crypto     (pblake2b_256)
-import           Plutarch.Prelude
+import Data.ByteString qualified as BS
+import Plutarch.Builtin.Crypto (pblake2b_256)
+import Plutarch.Core.Internal.Builtins (pconsBS', pindexBS')
+import Plutarch.Prelude
 
 -- Combine two ByteArrays using blake2b_256 hash
 pcombine :: Term s (PByteString :--> PByteString :--> PByteString)

@@ -53,7 +53,6 @@ import Plutarch.Internal.Lift
 import Plutarch.MerkleTree.Helpers (pcombine, pnibble, pnibbles, psuffix)
 import Plutarch.MerkleTree.Merkling (pmerkle_16, pnull_hash, psparse_merkle_16)
 import Plutarch.Prelude
-import Plutarch.Repr.Data
 import PlutusTx qualified
 import PlutusTx.Builtins as Builtins
 import PlutusTx.Builtins.Internal (BuiltinByteString (BuiltinByteString))
@@ -191,9 +190,8 @@ deriving via
 
 newtype PProof (s :: S) = PProof (Term s (PBuiltinList (PAsData PProofStep)))
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PIsData)
-
-instance DerivePlutusType PProof where type DPTStrat _ = PlutusTypeNewtype
+  deriving anyclass (SOP.Generic)
+  deriving PlutusType via (DeriveNewtypePlutusType PProof)
 
 data PNeighbor (s :: S) = PNeighbor
   { pneighbor'nibble :: Term s (PAsData PInteger)

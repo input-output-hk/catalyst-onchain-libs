@@ -21,10 +21,10 @@ module Plutarch.MerkleTree.Merkling(
   pnull_hash_8,
 ) where
 
-import qualified Data.ByteString             as BS
-import           Plutarch.Core.Utils         
-import           Plutarch.MerkleTree.Helpers (pcombine)
-import           Plutarch.Prelude
+import Data.ByteString qualified as BS
+import Plutarch.Core.Utils
+import Plutarch.MerkleTree.Helpers (pcombine)
+import Plutarch.Prelude
 
 -- Constants
 
