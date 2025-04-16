@@ -24,6 +24,7 @@ module Plutarch.Core.Value (
   ponlyLovelaceValueOf,
   plovelaceValueOfFast,
   ponlyAsset,
+  ponlyAssetC,
   phasSingleTokenNoData,
   phasSingleToken,
   pfirstTokenNameWithCS,
@@ -36,12 +37,16 @@ module Plutarch.Core.Value (
   pstripAda,
   ptrySingleTokenCS,
   pupdateAdaInValue,
+
+  PTriple (..),
 ) where
 
+import Generics.SOP qualified as SOP
 import GHC.Generics (Generic)
 import Plutarch.Core.Internal.Builtins (pmapData, ppairDataBuiltinRaw)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.PByteString (pisPrefixOf)
+import Plutarch.Internal.PlutusType (PlutusType)
 import Plutarch.Internal.Term (PType, punsafeCoerce)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
@@ -50,16 +55,17 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
 import Plutarch.LedgerApi.Value (padaSymbol, padaSymbolData, pnormalize,
                                  pvalueOf)
 import Plutarch.LedgerApi.Value qualified as Value
-import Plutarch.Prelude (ClosedTerm, DerivePlutusType (..), PAsData, PBool,
+import Plutarch.Prelude (ClosedTerm, DeriveAsDataRec, PAsData, PBool,
                          PBuiltinList, PBuiltinPair, PByteString, PEq (..),
                          PInteger,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
-                         POrd ((#<=)), PShow, PlutusType, PlutusTypeScott, S,
-                         Term, pall, pany, pcon, pconstant, pdata, pelem,
-                         perror, pfilter, pfix, pfoldl, pforgetData, pfromData,
-                         pfstBuiltin, phoistAcyclic, pif, plam, plength, plet,
-                         pmap, pmatch, ppairDataBuiltin, precList, psndBuiltin,
-                         pto, type (:-->), (#$), (#))
+                         POrd ((#<=)), S, Term, pall, pany, pcon, pconstant,
+                         pdata, pelem, perror, pfilter, pfix, pfoldl,
+                         pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
+                         pif, plam, plength, plet, pmap, pmatch,
+                         ppairDataBuiltin, precList, psndBuiltin, pto,
+                         type (:-->), (#$), (#))
+import Plutarch.Repr.Data (DeriveAsDataRec (..))
 import PlutusLedgerApi.V1 (TokenName (..))
 
 adaTokenName :: TokenName
@@ -212,11 +218,10 @@ plovelaceValueOfFast val =
   in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
 
 data PTriple (a :: PType) (b :: PType) (c :: PType) (s :: S)
-  = PTriple (Term s a) (Term s b) (Term s c)
+  = PTriple (Term s (PAsData a)) (Term s (PAsData b)) (Term s (PAsData c))
   deriving stock (Generic)
-  deriving anyclass (PlutusType, PEq, PShow)
-
-instance DerivePlutusType (PTriple a b c) where type DPTStrat _ = PlutusTypeScott
+  deriving anyclass (SOP.Generic)
+  deriving (PlutusType) via (DeriveAsDataRec (PTriple a b c))
 
 {- | Extract the token name and the amount of the given currency symbol.
 Throws when the token name is not found or more than one token name is involved
@@ -230,11 +235,24 @@ ponlyAsset ::
   Term s (PValue keys amounts :--> PTriple PCurrencySymbol PTokenName PInteger)
 ponlyAsset = phoistAcyclic $
   plam $ \val ->
-    pmatch val $ \(PValue val') ->
+    ponlyAssetC val $ \(cs, tk, a) -> pcon $ PTriple cs tk a
+
+{- | Same as `ponlyAsset` but returns the triple trough a haskell-level continuation.
+-}
+ponlyAssetC ::
+  forall
+    (keys :: KeyGuarantees)
+    (amounts :: AmountGuarantees)
+    (s :: S)
+    r.
+  Term s (PValue keys amounts) -> ((Term s (PAsData PCurrencySymbol), Term s (PAsData PTokenName), Term s (PAsData PInteger)) -> Term s r) -> Term s r
+ponlyAssetC value k =
+    pmatch value $ \(PValue val') ->
       plet (pheadSingleton # pto val') $ \valuePair ->
         pmatch (pfromData (psndBuiltin # valuePair)) $ \(PMap tokens) ->
           plet (pheadSingleton # tokens) $ \tkPair ->
-            pcon (PTriple (pfromData (pfstBuiltin # valuePair)) (pfromData (pfstBuiltin # tkPair)) (pfromData (psndBuiltin # tkPair)))
+            k (pfstBuiltin # valuePair, pfstBuiltin # tkPair, psndBuiltin # tkPair)
+
 
 -- | Check that the provided value contains exactly one token of the given currency symbol.
 phasSingleTokenNoData ::
