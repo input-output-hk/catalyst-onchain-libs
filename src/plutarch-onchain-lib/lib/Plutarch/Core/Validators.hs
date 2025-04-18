@@ -3,7 +3,7 @@
 module Plutarch.Core.Validators (
   mkNFTMinting,
   alwaysFailScript,
-  mkPermissionedMinting,
+  mkPermissionedValidator,
 ) where
 
 import Plutarch.Core.Context (pscriptContextTxInfo, ptxInfoSignatories)
@@ -41,15 +41,14 @@ mkNFTMinting tn = plam $ \oref ctx -> P.do
     , phasUTxO # oref # pfromData ptxInfo'inputs
     ]
 
--- | Permissioned Minting Policy
--- This minting policy checks for a given permissioned credential in the signatories of the transaction.
--- It allows minting of any number of tokens with any token name so long as the credential authorizes the transaction.
+-- | Permissioned Validator
+-- This validator checks for a given permissioned credential in the signatories of the transaction.
 -- Arguments:
 --   1. Arbitrary BuiltinData used to provide a nonce to the script to allow the caller to create multiple
 --      instances with different script hashes.
 --   2. The permissioned credential that must be present in the signatories of the transaction.
-mkPermissionedMinting :: ClosedTerm (PData :--> PAsData PPubKeyHash :--> PScriptContext :--> PUnit)
-mkPermissionedMinting = plam $ \_ permissionedCred ctx ->
+mkPermissionedValidator :: ClosedTerm (PData :--> PAsData PPubKeyHash :--> PScriptContext :--> PUnit)
+mkPermissionedValidator = plam $ \_ permissionedCred ctx ->
   pvalidateConditions
     [ ptxSignedByPkh # permissionedCred # (pfromData . ptxInfoSignatories . pscriptContextTxInfo) ctx
     ]
