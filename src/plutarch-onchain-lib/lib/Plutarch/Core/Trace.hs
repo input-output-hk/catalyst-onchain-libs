@@ -15,7 +15,8 @@ import Data.Kind (Type)
 import Plutarch.Internal.Term (Config (NoTracing), pgetConfig)
 #ifdef DEBUG
 import Plutarch.Prelude (PBool, PShow, PString, S, Term, plam, pshow,
-                         ptraceDebug, ptraceInfo, (#), (:-->))
+                         ptraceDebug, ptraceInfo, ptraceInfoError,
+                         ptraceInfoIfFalse, (#), (:-->))
 #else
 import Plutarch.Prelude (PBool, PShow, PString, S, Term, perror, plam, pshow,
                          ptraceDebug, ptraceInfo, (#), (:-->))
