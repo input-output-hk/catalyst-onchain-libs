@@ -20,6 +20,9 @@ index-state:
 
 with-compiler: ghc-9.6.6
 
+constraints:
+  plutus-core == 1.40.0.0
+
 packages:
     src/plutarch-onchain-lib
 
