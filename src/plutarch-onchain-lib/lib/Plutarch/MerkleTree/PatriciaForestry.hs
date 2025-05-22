@@ -190,7 +190,7 @@ deriving via
 
 newtype PProof (s :: S) = PProof (Term s (PBuiltinList (PAsData PProofStep)))
   deriving stock (Generic)
-  deriving anyclass (SOP.Generic)
+  deriving anyclass (SOP.Generic, PIsData, PShow)
   deriving PlutusType via (DeriveNewtypePlutusType PProof)
 
 data PNeighbor (s :: S) = PNeighbor
@@ -202,11 +202,10 @@ data PNeighbor (s :: S) = PNeighbor
   deriving anyclass (SOP.Generic, PIsData, PEq, PShow)
   deriving (PlutusType) via (DeriveAsDataRec PNeighbor)
 
-
--- deriving via
---   DeriveDataPLiftable PNeighbor Neighbor
---   instance
---     PLiftable PNeighbor
+deriving via
+  DeriveDataPLiftable (PAsData PNeighbor) Neighbor
+  instance
+    PLiftable PNeighbor
 
 -- Test whether an element is present in the trie with a specific value. This
 -- requires a Proof of inclusion for the element. The latter can be

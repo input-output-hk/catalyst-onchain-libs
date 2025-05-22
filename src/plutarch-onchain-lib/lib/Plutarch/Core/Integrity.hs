@@ -17,10 +17,12 @@ module Plutarch.Core.Integrity (
   pisVotingPurpose,
   pisProposingPurpose,
   pfromJustData,
+  pisSpendingPurposeWithRef,
 ) where
 
 import Plutarch.Core.List (pheadSingleton)
-import Plutarch.LedgerApi.V3 (PCredential, PMaybeData, PScriptInfo)
+import Plutarch.LedgerApi.V3 (PCredential, PMaybeData, PScriptInfo,
+                              PScriptPurpose (..), PTxOutRef)
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 
@@ -106,3 +108,8 @@ pisProposingPurpose term = (pfstBuiltin # (pasConstr # pforgetData term)) #== 5
 pfromJustData :: Term s (PMaybeData a) -> Term s a
 pfromJustData term =
   punsafeCoerce $ phead # (psndBuiltin # (pasConstr # pforgetData (pdata term)))
+
+pisSpendingPurposeWithRef :: Term s (PAsData PScriptPurpose) -> Term s PTxOutRef -> Term s PBool
+pisSpendingPurposeWithRef term ref =
+  let expectedRef = pdata $ pcon $ PSpending ref
+  in expectedRef #== term
