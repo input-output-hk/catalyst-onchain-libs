@@ -67,8 +67,7 @@ pblake2b_256_digest_size = pconstant 32
 
 newtype MerklePatriciaForestry = MerklePatriciaForestry BuiltinByteString
   deriving stock (Show, Eq, Ord, Generic)
-PlutusTx.unstableMakeIsData ''MerklePatriciaForestry
-PlutusTx.makeLift ''MerklePatriciaForestry
+  deriving newtype (PlutusTx.ToData, PlutusTx.FromData, PlutusTx.UnsafeFromData)
 
 newtype PMerklePatriciaForestry (s :: S) = PMerklePatriciaForestry (Term s PByteString)
   deriving stock (Generic)
