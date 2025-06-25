@@ -278,7 +278,7 @@ pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
                     let root_ = (self # nextCursor # xs)
                         neighbor_ = pcon $
                           PNeighbor {
-                            pneighbor'nibble = pdata (pnibble # leafKey # nextCursor - 1),
+                            pneighbor'nibble = pdata (pnibble # leafKey # (nextCursor - 1)),
                             pneighbor'prefix = pdata (psuffix # leafKey # nextCursor),
                             pneighbor'root = pproofStep'value
                           }
