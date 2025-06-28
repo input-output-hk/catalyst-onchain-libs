@@ -262,8 +262,15 @@ pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
                 pmatch xs $ \case
                   PNil ->
                     pmatch (pfromData pproofStep'neighbor) $ \(PNeighbor {pneighbor'nibble, pneighbor'prefix, pneighbor'root}) ->
-                      let prefix_ = pconsBS' # pfromData pneighbor'nibble # pfromData pneighbor'prefix
-                      in pcombine # prefix_ # pfromData pneighbor'root
+                      pif (pfromData pproofStep'skip #== 0)
+                        (
+                          let prefix_ = pconsBS' # pfromData pneighbor'nibble # pfromData pneighbor'prefix
+                          in pcombine # prefix_ # pfromData pneighbor'root
+                        )
+                        (
+                          let originalPrefix = (pnibbles # path # cursor # (cursor #+ pfromData pproofStep'skip)) <> (pconsBS' # pfromData pneighbor'nibble # pfromData pneighbor'prefix)
+                          in pcombine # originalPrefix # pfromData pneighbor'root
+                        )
                   PCons _ _ ->
                     plet (cursor + 1 + pfromData pproofStep'skip) $ \nextCursor ->
                       let root_ = (self # nextCursor # xs)
