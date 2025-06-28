@@ -54,6 +54,7 @@ tests = testGroup "Merkle tree"
     , testEval "Example E2E Claim" test_prove_eth_claim
     , testEval "Insert Edgecase 1" test_insert_edgecase_1
     , testEval "Insert Edgecase 2" test_insert_edgecase_2
+    , testEval "Insert Edgecase 3" test_insert_edgecase_3
     ]
   , testGroup "Merkle tests" [
       QC.testProperty "merkle_4 property" merkle_4_test,
@@ -82,6 +83,40 @@ signEcdsaSecp256k1 signKey' msg =
       case toMessageHash b of
         Just m  -> m
         Nothing -> error "Invalid EcdsaSecp256k1DSIGN message"
+
+proof_insert_edgecase_3 :: ClosedTerm PProof
+proof_insert_edgecase_3 = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
+  [ Branch
+      { skip = 0
+      , neighbors = toBuiltinHexString "dd79d1a4980ff4ab374d6ed011b6a9b963fe5fd141a669fb20ef0f08250c9d928bdce2239643c187358c1abf47ae78136d7d8dce94b9c2bd22f4f3b1427c90b4aed17c11bddfc6d68b809b2de8f5129c43804516b4e6d67625c5780032dc0dad97b4d37f1699995fb7572eef017468819b948c8a16ec9732479d1d70c80996cd"
+      }
+  , Branch
+      { skip = 0
+      , neighbors = toBuiltinHexString "63e2bed77aaf8034c17f5becd9d9e92c1820bd0609a0c92cf5746249270ad35ee6f92b945bbfa738a4d97409aaca86d9d44671b3da48a36dfb464501d9d147e4bffffd78b82dcef21e5d140e97318b8dfd1808014f2a02cf6057f460b203968e48554ea8b75d879edd62b154628ae8c30600b9e50434f0695ba6dd67465c8153"
+      }
+  , Branch
+      { skip = 0
+      , neighbors = toBuiltinHexString "054c6807d1047ebe0b79cd7fec4b341037400ef79a30e50a81062f4a7b8df0ef7c423847528893fe54621016e0df78000987b3d47f0b43769035d3ca844ab93893146efd718347306d9c6699a27db53997c1a06d89ad7fc741a615cf6848c1eb2e83ea7273c04abfabca2cce83614304df0c68d0189764d9f6ba29e9091404f9"
+      }
+  , Fork
+      { skip = 1
+      , neighbor =
+          Neighbor
+            { nibble = 12
+            , prefix = toBuiltinHexString ""
+            , root = toBuiltinHexString "cbf9b55ffdf4dbc9964cb51a01e6d66fae05bfb1704c057b8b0affb9eb8f6d3b"
+            }
+      }
+  ]
+
+test_insert_edgecase_3 :: Term s PBool
+test_insert_edgecase_3 =
+  let trie = pfrom_root # phexByteStr "d80496796601a1cdbad2912ba69af57185738594da390f36b65e237906808a89"
+      key' = phexByteStr "541dddfaf11096844f045f162c0d3095597a16f711432a91e36cff007665efdc"
+      value' = phexByteStr "272f42edb4c1c334cb38ebbe0772dc3c10"
+      expected_root = phexByteStr "6308f158d046f2d7928fcae02b66e12831dc42f33e5d89591ae9fa7f92726e42"
+   in (pinsert # trie # key' # value' # proof_insert_edgecase_3) #== (pfrom_root # expected_root)
+
 
 proof_insert_edgecase_1 :: ClosedTerm PProof
 proof_insert_edgecase_1 = pcon $ PProof $ pconstant @(PBuiltinList (PAsData PProofStep)) $
