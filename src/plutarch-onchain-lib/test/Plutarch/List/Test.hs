@@ -25,6 +25,15 @@ tests = testGroup "List Utilities"
       , testEvalEqual "pmustFind"
           (pmustFind # plam (#== 6) # pconstant @(PBuiltinList PInteger) [1..6])
           (pconstant @PInteger 6)
+      , testEvalEqual "pisUniqueSet"
+          (pisUniqueSet # 25 # pconstant @(PBuiltinList PInteger) [1..25])
+          (pconstant True)
+      , testEvalEqual "pisUniqueSet (not unique)"
+          (pisUniqueSet # 25 # pconstant @(PBuiltinList PInteger) (3 : [1..24]))
+          (pconstant False)
+      , testEvalEqual "pbuiltinListLengthFast"
+          (pbuiltinListLengthFast # 99 # pconstant @(PBuiltinList PInteger) [1..99])
+          (pconstant @PInteger 99)
       ]
   , testGroup "EvalFail Tests"
       [ testEvalFail "pheadSingleton 2 elements" (pheadSingleton # pconstant @(PBuiltinList PInteger) [1,2])
