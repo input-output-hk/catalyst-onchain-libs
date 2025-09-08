@@ -258,7 +258,7 @@ pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
                , (20 #<= remainingExpected, self # (remainingExpected - 20) # (currentCount + 20) # (ptails20 # xs))
                , (10 #<= remainingExpected, self # (remainingExpected - 10) # (currentCount + 10) # (ptails10 # xs))
                ]
-               (pbuiltinListLength 0 # xs)
+               (currentCount + pbuiltinListLength 0 # xs)
    in go # n # 0 # elems
 
 -- | Check if a list consists of only unique elements.
