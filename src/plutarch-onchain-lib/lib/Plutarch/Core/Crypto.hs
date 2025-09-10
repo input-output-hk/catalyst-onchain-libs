@@ -26,9 +26,9 @@ import Plutarch.Core.Internal.Builtins (pindexBS')
 import Plutarch.Core.PByteString (pdropBS, ptakeBS)
 import Plutarch.Evaluate (unsafeEvalTerm)
 import Plutarch.Internal.Term (Config (NoTracing))
-import Plutarch.Prelude (ClosedTerm, PByteString, PEq ((#==)), PInteger, Term,
-                         pconstant, phexByteStr, phoistAcyclic, pif, plam,
-                         plengthBS, plet, pmod, type (:-->), (#))
+import Plutarch.Prelude (PByteString, PEq ((#==)), PInteger, Term, pconstant,
+                         phexByteStr, phoistAcyclic, pif, plam, plengthBS, plet,
+                         pmod, type (:-->), (#))
 import Plutarch.Script (Script (unScript))
 import PlutusCore.Crypto.Hash qualified as Hash
 import PlutusLedgerApi.Common (serialiseUPLC)
@@ -90,13 +90,13 @@ papplyHashedParameterV3 :: forall s.
 papplyHashedParameterV3 prefix hashedParam =
   pblake2b_224 # (scriptHeader <> postfix)
   where
-    postfix :: ClosedTerm PByteString
+    postfix :: forall t . Term t PByteString
     postfix = phexByteStr "0001"
 
     versionHeader :: Term s PByteString
     versionHeader = unsafeEvalTerm NoTracing (pintegerToByteString # pmostSignificantFirst # 1 # plutusVersion)
 
-    plutusVersion :: ClosedTerm PInteger
+    plutusVersion :: forall t . Term t PInteger
     plutusVersion = pconstant 3
 
     scriptHeader :: Term s PByteString

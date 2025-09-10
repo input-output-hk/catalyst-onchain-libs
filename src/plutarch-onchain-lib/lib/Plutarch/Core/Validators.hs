@@ -15,16 +15,16 @@ import Plutarch.LedgerApi.V3 (PPubKeyHash, PScriptContext (..),
                               PScriptInfo (..), PTxInfo (PTxInfo), PTxOutRef,
                               ptxInfo'inputs, ptxInfo'mint)
 import Plutarch.Monadic qualified as P
-import Plutarch.Prelude (ClosedTerm, PAsData, PData, PEq ((#==)), PUnit,
-                         pconstant, perror, pfromData, pfstBuiltin, plam, plet,
-                         pmatch, psndBuiltin, type (:-->), (#))
+import Plutarch.Prelude (PAsData, PData, PEq ((#==)), PUnit, Term, pconstant,
+                         perror, pfromData, pfstBuiltin, plam, plet, pmatch,
+                         psndBuiltin, type (:-->), (#))
 import PlutusLedgerApi.V3 (TokenName)
 
 -- | A one-shot minting policy that allows minting a single token with a given token name.
 -- Arguments:
 --   1. The token name to mint (Haskell level argument)
 --   2. The UTxO reference of the protocol parameters UTxO.
-mkNFTMinting :: TokenName -> ClosedTerm (PTxOutRef :--> PScriptContext :--> PUnit)
+mkNFTMinting :: TokenName -> (forall s . Term s (PTxOutRef :--> PScriptContext :--> PUnit))
 mkNFTMinting tn = plam $ \oref ctx -> P.do
   PScriptContext {pscriptContext'txInfo, pscriptContext'scriptInfo} <- pmatch ctx
   PTxInfo {ptxInfo'inputs, ptxInfo'mint} <- pmatch pscriptContext'txInfo
@@ -47,7 +47,7 @@ mkNFTMinting tn = plam $ \oref ctx -> P.do
 --   1. Arbitrary BuiltinData used to provide a nonce to the script to allow the caller to create multiple
 --      instances with different script hashes.
 --   2. The permissioned credential that must be present in the signatories of the transaction.
-mkPermissionedValidator :: ClosedTerm (PData :--> PAsData PPubKeyHash :--> PScriptContext :--> PUnit)
+mkPermissionedValidator :: forall s . Term s (PData :--> PAsData PPubKeyHash :--> PScriptContext :--> PUnit)
 mkPermissionedValidator = plam $ \_ permissionedCred ctx ->
   pvalidateConditions
     [ ptxSignedByPkh # permissionedCred # (pfromData . ptxInfoSignatories . pscriptContextTxInfo) ctx
@@ -59,5 +59,5 @@ mkPermissionedValidator = plam $ \_ permissionedCred ctx ->
 -- Argument:
 --  1. Arbitrary BuiltinData used to provide a nonce to the script to allow the caller to create multiple
 --     instances with different script hashes.
-alwaysFailScript :: ClosedTerm (PData :--> PScriptContext :--> PUnit)
+alwaysFailScript :: forall s . Term s (PData :--> PScriptContext :--> PUnit)
 alwaysFailScript = plam $ \_ _ctx -> perror

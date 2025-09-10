@@ -42,22 +42,21 @@ module Plutarch.Core.Value (
 ) where
 
 import Generics.SOP qualified as SOP
+import GHC.Base (Type)
 import GHC.Generics (Generic)
 import Plutarch.Core.Internal.Builtins (pmapData, ppairDataBuiltinRaw)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.PByteString (pisPrefixOf)
 import Plutarch.Internal.PlutusType (PlutusType)
-import Plutarch.Internal.Term (PType, punsafeCoerce)
-import Plutarch.LedgerApi.AssocMap qualified as AssocMap
+import Plutarch.Internal.Term (punsafeCoerce)
 import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
                               KeyGuarantees (Sorted), PCurrencySymbol,
                               PMap (..), PTokenName, PValue (..))
 import Plutarch.LedgerApi.Value (padaSymbol, padaSymbolData, pnormalize,
                                  pvalueOf)
 import Plutarch.LedgerApi.Value qualified as Value
-import Plutarch.Prelude (ClosedTerm, DeriveAsDataRec, PAsData, PBool,
-                         PBuiltinList, PBuiltinPair, PByteString, PEq (..),
-                         PInteger,
+import Plutarch.Prelude (DeriveAsDataRec, PAsData, PBool, PBuiltinList,
+                         PBuiltinPair, PByteString, PEq (..), PInteger,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
                          POrd ((#<=)), S, Term, pall, pany, pcon, pconstant,
                          pdata, pelem, perror, pfilter, pfix, pfoldl,
@@ -71,7 +70,7 @@ import PlutusLedgerApi.V1 (TokenName (..))
 adaTokenName :: TokenName
 adaTokenName = TokenName ""
 
-padaTokenData :: ClosedTerm (PAsData PTokenName)
+padaTokenData :: forall s . Term s (PAsData PTokenName)
 padaTokenData = pconstant adaTokenName
 
 {- | Finds the associated Currency symbols that contain token names prefixed with the ByteString.
@@ -80,11 +79,11 @@ pfindCurrencySymbolsByTokenPrefix ::
   forall
     (anyOrder :: KeyGuarantees)
     (anyAmount :: AmountGuarantees).
-  ClosedTerm
+  (forall s . Term s
     ( PValue anyOrder anyAmount
         :--> PByteString
         :--> PBuiltinList (PAsData PCurrencySymbol)
-    )
+    ))
 pfindCurrencySymbolsByTokenPrefix = phoistAcyclic $
   plam $ \value prefix ->
     plet (pisPrefixOf # prefix) $ \prefixCheck ->
@@ -103,11 +102,11 @@ pfindCurrencySymbolsByTokenName ::
   forall
     (anyOrder :: KeyGuarantees)
     (anyAmount :: AmountGuarantees).
-  ClosedTerm
+  ( forall s . Term s
     ( PValue anyOrder anyAmount
         :--> PTokenName
         :--> PBuiltinList (PAsData PCurrencySymbol)
-    )
+    ))
 pfindCurrencySymbolsByTokenName = phoistAcyclic $
   plam $ \value tn ->
       let mapVal = pto (pto value)
@@ -122,8 +121,8 @@ phasDataCS ::
   forall
     (anyOrder :: KeyGuarantees)
     (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    (PAsData PCurrencySymbol :--> PValue anyOrder anyAmount :--> PBool)
+  (forall s . Term s
+    (PAsData PCurrencySymbol :--> PValue anyOrder anyAmount :--> PBool))
 phasDataCS = phoistAcyclic $
   plam $ \symbol value ->
     pany # plam (\tkPair -> (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
@@ -136,8 +135,8 @@ phasCS ::
   forall
     (anyOrder :: KeyGuarantees)
     (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    (PValue anyOrder anyAmount :--> PCurrencySymbol :--> PBool)
+  (forall s . Term s
+    (PValue anyOrder anyAmount :--> PCurrencySymbol :--> PBool))
 phasCS = phoistAcyclic $
   plam $ \value symbol ->
     pany # plam (\tkPair -> pfromData (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
@@ -147,11 +146,11 @@ pcontainsCurrencySymbols ::
   forall
     (anyOrder :: KeyGuarantees)
     (anyAmount :: AmountGuarantees).
-  ClosedTerm
+  (forall s . Term s
     ( PValue anyOrder anyAmount
         :--> PBuiltinList (PAsData PCurrencySymbol)
         :--> PBool
-    )
+    ))
 pcontainsCurrencySymbols = phoistAcyclic $
   plam $ \inValue symbols ->
     let value = pmap # pfstBuiltin #$ pto $ pto inValue
@@ -181,7 +180,7 @@ psubtractValue ::
   Term s (PValue 'Sorted amounts) ->
   Term s (PValue 'Sorted amounts) ->
   Term s (PValue 'Sorted 'NonZero)
-a `psubtractValue` b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMap.NonCommutative # plam (-) # a # b
+a `psubtractValue` b =  pnormalize #$ Value.punionWith # plam (-) # a # b
 
 -- | Constructs a singleton `PValue` with the given currency symbol, token name, and amount.
 -- Argumenmts:
@@ -217,7 +216,7 @@ plovelaceValueOfFast val =
       adaEntry = phead # csPairs
   in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
 
-data PTriple (a :: PType) (b :: PType) (c :: PType) (s :: S)
+data PTriple (a :: S -> Type) (b :: S -> Type) (c :: S -> Type) (s :: S)
   = PTriple (Term s (PAsData a)) (Term s (PAsData b)) (Term s (PAsData c))
   deriving stock (Generic)
   deriving anyclass (SOP.Generic)
@@ -421,11 +420,11 @@ pfilterCSFromValue ::
   forall
     (anyOrder :: KeyGuarantees)
     (anyAmount :: AmountGuarantees).
-  ClosedTerm
+  (forall s . Term s
     ( PValue anyOrder anyAmount
         :--> PAsData PCurrencySymbol
         :--> PValue anyOrder anyAmount
-    )
+    ))
 pfilterCSFromValue = phoistAcyclic $
   plam $ \value policyId ->
       let mapVal = pto (pto value)
@@ -437,11 +436,11 @@ pfilterCSFromValue = phoistAcyclic $
 -- This function checks if the first value contains all the tokens of the second value
 -- and the quantities of the tokens in the first value are greater than or equal to the quantities of the tokens in the second value.
 pvalueContains ::
-  ClosedTerm
+  (forall s . Term s
     ( PValue 'Sorted 'Positive
         :--> PValue 'Sorted 'Positive
         :--> PBool
-    )
+    ))
 pvalueContains = phoistAcyclic $
   plam $ \superset subset ->
     let forEachTN cs = plam $ \tnPair ->

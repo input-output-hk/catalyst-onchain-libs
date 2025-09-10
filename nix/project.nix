@@ -11,7 +11,10 @@ let
     inputMap = {
       "https://chap.intersectmbo.org/" = inputs.CHaP;
     };
-    shell.withHoogle = false;
+    shell = {
+      withHoogle = false;
+      tools.haskell-language-server = "2.11.0.0"; # choose one that works with the compiler
+    };
   };
 
   project = lib.iogx.mkHaskellProject {

@@ -30,11 +30,11 @@ module Plutarch.Core.List (
 ) where
 
 import Data.List (foldl')
+import GHC.Base (Type)
 import Plutarch.Core.Internal.Builtins (pcountSetBits', pindexBS', pwriteBits')
-import Plutarch.Internal.Term (PType)
 import Plutarch.Monadic qualified as P
-import Plutarch.Prelude (ClosedTerm, PAsData, PBool (..), PBuiltinList (..),
-                         PByteString, PData, PEq ((#==)), PInteger, PIsListLike,
+import Plutarch.Prelude (PAsData, PBool (..), PBuiltinList (..), PByteString,
+                         PData, PEq ((#==)), PInteger, PIsListLike,
                          PListLike (PElemConstraint, pcons, pelimList, phead, pnil, ptail),
                          PMultiplicativeSemigroup ((#*)), POrd ((#<), (#<=)),
                          PPair (..), S, Term, pcon, pconcat, pcond, pconsBS,
@@ -42,6 +42,8 @@ import Plutarch.Prelude (ClosedTerm, PAsData, PBool (..), PBuiltinList (..),
                          phoistAcyclic, pif, plam, plet, pmatch, pmod, precList,
                          ptraceInfoError, type (:-->), (#$), (#), (#>))
 import Prelude
+
+type ClosedTerm a = (forall (s' :: S). Term s' a)
 
 -- | Metaprogramming utility that translates to n applications of ptail
 pnTails :: PIsListLike list a => Integer -> Term s (list a) -> Term s (list a)
@@ -129,7 +131,7 @@ pelemAtFast = phoistAcyclic $
 -- | Drop the first n elements of a list.
 -- Uses naive recursion and is inefficient for large lists.
 -- However, the script size is smaller than the fast variant.
-pdropR :: forall (list :: PType -> PType) (a :: PType) (s :: S).
+pdropR :: forall (list :: (S -> Type) -> (S -> Type)) (a :: S -> Type) (s :: S).
           PIsListLike list a =>
           Term s (PInteger :--> list a :--> list a)
 pdropR = phoistAcyclic $
@@ -249,7 +251,7 @@ pbuiltinListLength acc =
 -- | Check that a list contains exactly n elements.
 --  This is extremely efficient, as it counts a large number of elements in each recursive step.
 --  The script size is larger than the naive variant, but the ex-unit cost is significantly lower.
-pbuiltinListLengthFast :: forall (a :: PType) (s :: S). (PElemConstraint PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
+pbuiltinListLengthFast :: forall (a :: S -> Type) (s :: S). (PElemConstraint PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
 pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
   let go :: Term (s2 :: S) (PInteger :--> PInteger :--> PBuiltinList a :--> PInteger)
       go = pfix #$ plam $ \self remainingExpected currentCount xs ->
@@ -293,7 +295,7 @@ pmkBuiltinList = foldr go (pcon PNil)
 --
 -- Errors if no element satisfies the predicate.
 pfindWithRest ::
-  forall (list :: PType -> PType) (a :: PType).
+  forall (list :: (S -> Type) -> (S -> Type)) (a :: S -> Type).
   PListLike list =>
   PElemConstraint list a =>
   ClosedTerm
