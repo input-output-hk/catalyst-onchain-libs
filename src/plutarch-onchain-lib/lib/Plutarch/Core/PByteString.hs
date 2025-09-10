@@ -14,17 +14,17 @@ module Plutarch.Core.PByteString (
 ) where
 
 import Plutarch.LedgerApi.Value (PTokenName)
-import Plutarch.Prelude (ClosedTerm, PBool, PByteString, PEq ((#==)), PInteger,
-                         Term, phoistAcyclic, plam, plengthBS, psliceBS, pto,
+import Plutarch.Prelude (PBool, PByteString, PEq ((#==)), PInteger, Term,
+                         phoistAcyclic, plam, plengthBS, psliceBS, pto,
                          type (:-->), (#))
 
 -- | Checks if a tokenName is prefixed by a certain ByteString
-pisPrefixedWith :: ClosedTerm (PTokenName :--> PByteString :--> PBool)
+pisPrefixedWith :: forall s . Term s (PTokenName :--> PByteString :--> PBool)
 pisPrefixedWith = plam $ \tn prefix ->
   pisPrefixOf # prefix # pto tn
 
 -- | Checks if the first ByteString is a prefix of the second
-pisPrefixOf :: ClosedTerm (PByteString :--> PByteString :--> PBool)
+pisPrefixOf :: forall s . Term s (PByteString :--> PByteString :--> PBool)
 pisPrefixOf = plam $ \prefix src ->
   let prefixLength = plengthBS # prefix
       prefix' = psliceBS # 0 # prefixLength # src
