@@ -39,6 +39,7 @@ module Plutarch.Core.Value (
   ptrySingleTokenCS,
   pupdateAdaInValue,
   pnegateTokens,
+  punionTokens,
   pvalueEqualsDeltaCurrencySymbol,
   PTriple (..),
 ) where
@@ -67,7 +68,7 @@ import Plutarch.Prelude (ClosedTerm, DeriveAsDataRec, PAsData, PBool,
                          pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
                          pif, plam, plength, plet, pmap, pmatch,
                          ppairDataBuiltin, precList, psndBuiltin, pto,
-                         type (:-->), (#$), (#))
+                         type (:-->), (#$), (#), (#<))
 import Plutarch.Repr.Data (DeriveAsDataRec (..))
 import PlutusLedgerApi.V1 (TokenName (..))
 
@@ -579,6 +580,33 @@ pnegateTokens = pfix #$ plam $ \self tokens ->
     pnil
     tokens
 
+-- | Union two sorted lists of token quantity pairs.
+-- This function unions two sorted lists of token quantity pairs, adding the quantities of the tokens that have the same token name.
+punionTokens :: Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+punionTokens = pfix #$ plam $ \self tokensA tokensB ->
+  pelimList
+    (\tokenPairA tokensRestA ->
+      plet (pfstBuiltin # tokenPairA) $ \tokenNameA ->
+      pelimList
+        (\tokenPairB tokensRestB ->
+           pif (pfromData tokenNameA #== pfromData (pfstBuiltin # tokenPairB))
+               ( -- both entries have the same token so we add quantities
+                let quantityA = pfromData (psndBuiltin # tokenPairA)
+                    quantityB = pfromData (psndBuiltin # tokenPairB)
+                in pcons # (ppairDataBuiltin # tokenNameA # pdata (quantityA + quantityB)) # (self # tokensRestA # tokensRestB)
+               )
+               (
+                pif (pfromData tokenNameA #< pfromData (pfstBuiltin # tokenPairB))
+                    -- entry A has a token that entry B does not so we add the token and quantity from entry A.
+                    (pcons # tokenPairA # (self # tokensRestA # tokensB))
+                    -- entry B has a token that entry A does not so we add the token and quantity from entry B.
+                    ( pcons # tokenPairB # (self # tokensA # tokensRestB))
+               )
+        )
+        pnil tokensB
+    )
+    pnil tokensA
+
 -- |
 -- `pvalueEqualsDeltaCurrencySymbol # progCS # inputUTxOValue # outputUTxOValue` MUST check that inputUTxOValue is equal to outputUTxOValue for all tokens except those of currency symbol progCS.
 -- The function should return a value consisting of only tokens with the currency symbol progCS, this value is as follows: For each token t of currency symbol progCS, the quantity of the token
@@ -689,19 +717,19 @@ pvalueEqualsDeltaCurrencySymbol = plam $ \progCS inputUTxOValue outputUTxOValue 
 -- `pvalueEqualsDeltaCurrencySymbolFast` is a very efficient variant of `pvalueEqualsDeltaCurrencySymbol`
 -- that takes advantage of the `serialiseData` builtin and the redeemer-indexing design pattern to produce the result
 -- without traversing the entirety of either value; only the relevant entry (the `progCS` entry) of each value is traversed.
-pvalueEqualsDeltaCurrencySymbolFast ::
-  Term s PInteger
-    -> Term s PInteger
-    -> Term s PInteger
-    -> Term s PInteger
-    -> Term s (PAsData (PValue anyOrder anyAmount))
-    -> Term s (PAsData (PValue anyOrder anyAmount))
-    -> Term s (PAsData (PMap anyOrder PTokenName PInteger))
-    -> Term s (PAsData (PMap anyOrder PTokenName PInteger))
+-- pvalueEqualsDeltaCurrencySymbolFast ::
+--   Term s PInteger
+--     -> Term s PInteger
+--     -> Term s PInteger
+--     -> Term s PInteger
+--     -> Term s (PAsData (PValue anyOrder anyAmount))
+--     -> Term s (PAsData (PValue anyOrder anyAmount))
+--     -> Term s (PAsData (PMap anyOrder PTokenName PInteger))
+--     -> Term s (PAsData (PMap anyOrder PTokenName PInteger))
 
-    -> Term s
-pvalueEqualsDeltaCurrencySymbolFast prefixStartIdx prefixEndIdx postfixStartIdx postfixEndIdx inputValue outputValue progCSEntryAUntrusted progCSEntryBUntrusted =
-  ptraceError "pvalueEqualsDeltaCurrencySymbolFast: TODO"
+--     -> Term s
+-- pvalueEqualsDeltaCurrencySymbolFast prefixStartIdx prefixEndIdx postfixStartIdx postfixEndIdx inputValue outputValue progCSEntryAUntrusted progCSEntryBUntrusted =
+--   ptraceError "pvalueEqualsDeltaCurrencySymbolFast: TODO"
 
 -- Below is a pseudocode implementation in Plinth.
 -- If the need arises we can port this to Plutarch.

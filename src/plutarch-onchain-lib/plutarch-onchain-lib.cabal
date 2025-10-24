@@ -65,6 +65,7 @@ library
     Plutarch.Core.Eval
     Plutarch.Core.Integrity
     Plutarch.Core.Internal.Builtins
+    Plutarch.Core.Internal.Conditionals
     Plutarch.Core.List
     Plutarch.Core.PByteString
     Plutarch.Core.Scripts

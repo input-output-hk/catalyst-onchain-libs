@@ -1,7 +1,21 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QualifiedDo       #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE ImplicitPrelude       #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedRecordDot   #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE QualifiedDo           #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ViewPatterns          #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use camelCase" #-}
+
 module Plutarch.Core.List (
   pdropFast,
   pdropR,
@@ -24,23 +38,30 @@ module Plutarch.Core.List (
   ptails30,
   consAsData,
   pmkBuiltinList,
+  pmkBuiltinListInteger,
+  pmultiIntegerCons,
   pfindWithRest,
   psetBitInteger,
   pcheckIndex,
+  pmapBuiltinListDataToInteger,
+  pmapBuiltinListDataToIntegerFast,
 ) where
 
 import Data.List (foldl')
+import Generics.SOP (NP (..))
 import Plutarch.Core.Internal.Builtins (pcountSetBits', pindexBS', pwriteBits')
 import Plutarch.Internal.Term (PType)
+import Plutarch.List hiding (pelemAt')
 import Plutarch.Monadic qualified as P
 import Plutarch.Prelude (ClosedTerm, PAsData, PBool (..), PBuiltinList (..),
                          PByteString, PData, PEq ((#==)), PInteger, PIsListLike,
                          PListLike (PElemConstraint, pcons, pelimList, phead, pnil, ptail),
                          PMultiplicativeSemigroup ((#*)), POrd ((#<), (#<=)),
-                         PPair (..), S, Term, pcon, pconcat, pcond, pconsBS,
-                         pconstant, perror, pfix, pforgetData, phexByteStr,
-                         phoistAcyclic, pif, plam, plet, pmatch, pmod, precList,
-                         ptraceInfoError, type (:-->), (#$), (#), (#>))
+                         PPair (..), S, Term, pasInt, pcon, pconcat, pcond,
+                         pconsBS, pconstant, perror, pfix, pforgetData,
+                         phexByteStr, phoistAcyclic, pif, plam, plet, pmatch,
+                         pmod, precList, ptraceInfoError, type (:-->), (#$),
+                         (#), (#>))
 import Prelude
 
 -- | Metaprogramming utility that translates to n applications of ptail
@@ -288,6 +309,23 @@ pmkBuiltinList = foldr go (pcon PNil)
     go :: Term s PData -> Term s (PBuiltinList PData) -> Term s (PBuiltinList PData)
     go x xs = pcon $ PCons x xs
 
+--- | Metaprogramming utility to construct a PBuiltinList from a list of PData.
+pmkBuiltinListInteger :: [Term s PInteger] -> Term s (PBuiltinList PInteger)
+pmkBuiltinListInteger = foldr go (pcon PNil)
+  where
+    go :: Term s PInteger -> Term s (PBuiltinList PInteger) -> Term s (PBuiltinList PInteger)
+    go x xs = pcon $ PCons x xs
+
+-- | Metaprogramming utility that prepends multiple integers to a list
+-- pmultiIntegerCons [1, 2, 3] someList expands to: pcons # 1 #$ pcons # 2 #$ pcons # 3 #$ someList
+-- >>> punsafeEvalTerm NoTracing (pmultiIntegerCons [1, 2, 3] (pnil))
+pmultiIntegerCons :: [Term s PInteger] -> Term s (PBuiltinList PInteger :--> PBuiltinList PInteger)
+pmultiIntegerCons xs = plam $ \ys -> go xs ys
+  where
+    go :: [Term s PInteger] -> Term s (PBuiltinList PInteger) -> Term s (PBuiltinList PInteger)
+    go [] ys = ys
+    go (x:rest) ys = pcons # x # (go rest ys)
+
 -- | Find the first element in a list that satisfies a predicate, and return it along with the other elements
 -- (the provided list with the element removed).
 --
@@ -313,3 +351,90 @@ pfindWithRest = phoistAcyclic $
               self # xs #$ pcons # x # acc
         mnil = const (ptraceInfoError "Find")
      in precList mcons mnil # ys # pnil
+
+-- | Convert PBuiltinList PData to PBuiltinList PInteger using efficient recursion unrolling
+-- The first argument is the length of the input list.
+pmapBuiltinListDataToIntegerFast :: Term s (PInteger :--> PBuiltinList PData :--> PBuiltinList PInteger)
+pmapBuiltinListDataToIntegerFast = phoistAcyclic $ plam $ \n xs ->
+  let go :: Term (s2 :: S) (PInteger :--> PBuiltinList PData :--> PBuiltinList PInteger)
+      go = pfix #$ plam $ \self remainingExpected currentDataList ->
+             pcond
+               [ (20 #<= remainingExpected, (
+                 pmatchList @20 @(PBuiltinList PInteger)
+                  currentDataList
+                  (\(entryOne
+                     :* entryTwo
+                     :* entryThree
+                     :* entryFour
+                     :* entryFive
+                     :* entrySix
+                     :* entrySeven
+                     :* entryEight
+                     :* entryNine
+                     :* entryTen
+                     :* entryEleven
+                     :* entryTwelve
+                     :* entryThirteen
+                     :* entryFourteen
+                     :* entryFifteen
+                     :* entrySixteen
+                     :* entrySeventeen
+                     :* entryEighteen
+                     :* entryNineteen
+                     :* entryTwenty
+                     :* Nil) rest ->
+                    pmultiIntegerCons
+                      [ pasInt # entryOne
+                      , pasInt # entryTwo
+                      , pasInt # entryThree
+                      , pasInt # entryFour
+                      , pasInt # entryFive
+                      , pasInt # entrySix
+                      , pasInt # entrySeven
+                      , pasInt # entryEight
+                      , pasInt # entryNine
+                      , pasInt # entryTen
+                      , pasInt # entryEleven
+                      , pasInt # entryTwelve
+                      , pasInt # entryThirteen
+                      , pasInt # entryFourteen
+                      , pasInt # entryFifteen
+                      , pasInt # entrySixteen
+                      , pasInt # entrySeventeen
+                      , pasInt # entryEighteen
+                      , pasInt # entryNineteen
+                      , pasInt # entryTwenty
+                      ] # (self # (remainingExpected - 20) # rest)
+                    )
+                  )
+               )
+               , (10 #<= remainingExpected, (
+                   pmatchList @10 @(PBuiltinList PInteger)
+                    currentDataList
+                    (\(entryOne :* entryTwo :* entryThree :* entryFour :* entryFive :* entrySix :* entrySeven :* entryEight :* entryNine :* entryTen :* Nil) rest ->
+                      pmultiIntegerCons
+                        [ pasInt # entryOne
+                        , pasInt # entryTwo
+                        , pasInt # entryThree
+                        , pasInt # entryFour
+                        , pasInt # entryFive
+                        , pasInt # entrySix
+                        , pasInt # entrySeven
+                        , pasInt # entryEight
+                        , pasInt # entryNine
+                        , pasInt # entryTen
+                        ] # (self # (remainingExpected - 10) # rest)
+                    )
+                  ))
+               ]
+               (pmapBuiltinListDataToInteger # currentDataList)
+   in go # n # xs
+
+-- | Metaprogramming utility that converts n elements from PBuiltinList PData to PBuiltinList PInteger
+-- This function unrolls recursion by processing multiple elements at once, similar to pnTails
+pmapBuiltinListDataToInteger :: Term s (PBuiltinList PData :--> PBuiltinList PInteger)
+pmapBuiltinListDataToInteger =
+  pfix #$
+    plam $ \self inputDataList ->
+      pelimList (\x xs -> pcons # (pasInt # x) # (self # xs)) pnil inputDataList
+

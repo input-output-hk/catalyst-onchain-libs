@@ -105,7 +105,14 @@ main =
       , testGroup "Integer Bitmask" integerBitMaskBenches
       , testGroup "Negation" negationBenches
       , testGroup "ByteString Equality" benchByteStringEquality
+      , testGroup "Convert List" convertListBenches
       ]
+
+convertListBenches :: [TestTree]
+convertListBenches =
+  [ bench "convert list pmapBuiltinListDataToIntegerFast" (pmapBuiltinListDataToIntegerFast # 50 # pconstant @(PBuiltinList PData) (fmap PlutusTx.toData ([1..50] :: [Integer])))
+  , bench "convert list pmap" (pmap # plam pfromData # pconstant @(PBuiltinList (PAsData PInteger)) [1..50])
+  ]
 
 dropBenches :: [TestTree]
 dropBenches =
