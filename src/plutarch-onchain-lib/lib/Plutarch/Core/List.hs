@@ -282,6 +282,20 @@ pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
                (currentCount + pbuiltinListLength 0 # xs)
    in go # n # 0 # elems
 
+-- | Check if a list of data-encoded integers consists of only unique elements.
+-- If so, returns the decoded list of integers. Otherwise, errors.
+-- Uses a bitmask to keep track of which elements have been seen.
+-- This should be used for the redeemer indexing design pattern because it avoids duplicate work and performs multiple necessary operations in a single pass.
+-- Namely, it:
+-- 1. Ensures the list consists of only unique elements.
+-- 2. Ensures the length of the list is exactly n.
+-- 3. Converts the list of data-encoded integers to a list of integers, which are returned and can be directly used with `pelemAtFast`.
+puniqueSetDataEncoded :: Term s (PInteger :--> PBuiltinList (PAsData PInteger) :--> PBuiltinList PInteger)
+puniqueSetDataEncoded = phoistAcyclic $ plam $ \n xs ->
+  plet ((pmapBuiltinListDataToIntegerFast # n # xs)) \integerList ->
+    let flagUniqueBits = pwriteBits' # emptyByteArray # integerList # pconstant True
+    in pif (pcountSetBits' # flagUniqueBits #== n) integerList perror
+
 -- | Check if a list consists of only unique elements.
 -- Uses a bitmask to keep track of which elements have been seen.
 -- Significantly more efficient than _pIsUnique.
@@ -427,11 +441,17 @@ pmapBuiltinListDataToIntegerFast = phoistAcyclic $ plam $ \n xs ->
                     )
                   ))
                ]
-               (pmapBuiltinListDataToInteger # currentDataList)
+               (pmapBuiltinListDataToIntegerEnforceN remainingExpected # currentDataList)
    in go # n # xs
 
--- | Metaprogramming utility that converts n elements from PBuiltinList PData to PBuiltinList PInteger
--- This function unrolls recursion by processing multiple elements at once, similar to pnTails
+
+pmapBuiltinListDataToIntegerEnforceN :: forall s. Term s PInteger -> Term s (PBuiltinList PData :--> PBuiltinList PInteger)
+pmapBuiltinListDataToIntegerEnforceN n =
+  (pfix #$
+    plam $ \self expectedRemaining inputDataList ->
+      pelimList (\x xs -> pcons # (pasInt # x) # (self # (expectedRemaining - 1) # xs)) (pif (n #== 0) pnil perror) inputDataList
+  ) # n
+
 pmapBuiltinListDataToInteger :: Term s (PBuiltinList PData :--> PBuiltinList PInteger)
 pmapBuiltinListDataToInteger =
   pfix #$
