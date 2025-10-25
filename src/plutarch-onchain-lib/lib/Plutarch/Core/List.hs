@@ -45,12 +45,13 @@ module Plutarch.Core.List (
   pcheckIndex,
   pmapBuiltinListDataToInteger,
   pmapBuiltinListDataToIntegerFast,
+  puniqueSetDataEncoded,
 ) where
 
 import Data.List (foldl')
 import Generics.SOP (NP (..))
 import Plutarch.Core.Internal.Builtins (pcountSetBits', pindexBS', pwriteBits')
-import Plutarch.Internal.Term (PType)
+import Plutarch.Internal.Term (PType, punsafeCoerce)
 import Plutarch.List hiding (pelemAt')
 import Plutarch.Monadic qualified as P
 import Plutarch.Prelude (ClosedTerm, PAsData, PBool (..), PBuiltinList (..),
@@ -292,7 +293,7 @@ pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
 -- 3. Converts the list of data-encoded integers to a list of integers, which are returned and can be directly used with `pelemAtFast`.
 puniqueSetDataEncoded :: Term s (PInteger :--> PBuiltinList (PAsData PInteger) :--> PBuiltinList PInteger)
 puniqueSetDataEncoded = phoistAcyclic $ plam $ \n xs ->
-  plet ((pmapBuiltinListDataToIntegerFast # n # xs)) \integerList ->
+  plet ((pmapBuiltinListDataToIntegerFast # n # punsafeCoerce xs)) $ \integerList ->
     let flagUniqueBits = pwriteBits' # emptyByteArray # integerList # pconstant True
     in pif (pcountSetBits' # flagUniqueBits #== n) integerList perror
 
