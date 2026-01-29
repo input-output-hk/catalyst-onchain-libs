@@ -1,0 +1,91 @@
+Benchmarks
+  Drops
+    recursive:                          OK
+      CPU  | 428202982
+      MEM  | 1720902  
+      SIZE | 1059     
+    fast:                               OK
+      CPU  | 74222124
+      MEM  | 197578  
+      SIZE | 1178    
+  Lengths
+    recursive:                          OK
+      CPU  | 406465594
+      MEM  | 1585632  
+      SIZE | 1054     
+    fast:                               OK
+      CPU  | 77712480
+      MEM  | 208044  
+      SIZE | 1208    
+  Is Unique
+    pow2:                               OK
+      CPU  | 1742730097
+      MEM  | 6292426   
+      SIZE | 1073      
+    bit trick:                          OK
+      CPU  | 37110320
+      MEM  | 91490   
+      SIZE | 981     
+  Find
+    optional:                           OK
+      CPU  | 5876532
+      MEM  | 23990  
+      SIZE | 445    
+    bool:                               OK
+      CPU  | 5425382
+      MEM  | 21658  
+      SIZE | 428    
+    try:                                OK
+      CPU  | 5524532
+      MEM  | 21790  
+      SIZE | 431    
+  Count Spend Scripts
+    recursive:                          OK
+      CPU  | 167490927
+      MEM  | 543033   
+      SIZE | 1943     
+    fast:                               OK
+      CPU  | 23898144
+      MEM  | 77020   
+      SIZE | 2105    
+  Elem At
+    recursive:                          OK
+      CPU  | 170902979
+      MEM  | 686998   
+      SIZE | 424      
+    fast:                               OK
+      CPU  | 41507886
+      MEM  | 127304  
+      SIZE | 513     
+  Unroll
+    bounded-unroll length:              OK
+      CPU  | 81491500
+      MEM  | 253900  
+      SIZE | 3824    
+    no-unroll recursive length:         OK
+      CPU  | 162906094
+      MEM  | 635832   
+      SIZE | 417      
+    bounded-unroll count script inputs: OK
+      CPU  | 274485808
+      MEM  | 724902   
+      SIZE | 22268    
+    no-unroll count script inputs:      OK
+      CPU  | 297013594
+      MEM  | 865532   
+      SIZE | 5073     
+    unbounded-whole-unroll length:      OK
+      CPU  | 275509594
+      MEM  | 731132   
+      SIZE | 6382     
+  Integer Bitmask
+    pcheckIndex:                        OK
+      CPU  | 10360716
+      MEM  | 34908   
+      SIZE | 700     
+    psetBitInteger:                     OK
+      CPU  | 10520943
+      MEM  | 36111   
+      SIZE | 707     
+
+All 20 tests passed (0.03s)

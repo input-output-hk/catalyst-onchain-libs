@@ -18,11 +18,16 @@ module Plutarch.Core.Integrity (
   pisProposingPurpose,
   pfromJustData,
   pisSpendingPurposeWithRef,
+  pcredentialIntegrityCheck,
+  pstakingCredentialIntegrityCheck,
+  pmaybeStakingCredentialIntegrityCheck,
+  paddressIntegrityCheck,
 ) where
 
 import Plutarch.Core.List (pheadSingleton)
-import Plutarch.LedgerApi.V3 (PCredential, PMaybeData, PScriptInfo,
-                              PScriptPurpose (..), PTxOutRef)
+import Plutarch.LedgerApi.V3 (PAddress, PCredential, PMaybeData, PScriptInfo,
+                              PScriptPurpose (..), PStakingCredential,
+                              PTxOutRef)
 import Plutarch.Prelude
 import Plutarch.Unsafe (punsafeCoerce)
 
@@ -113,3 +118,65 @@ pisSpendingPurposeWithRef :: Term s (PAsData PScriptPurpose) -> Term s PTxOutRef
 pisSpendingPurposeWithRef term ref =
   let expectedRef = pdata $ pcon $ PSpending ref
   in expectedRef #== term
+
+{- | Check if the provided data-encoded term has the expected builtin data representation of a credential.
+Return True if the argument is a structurally valid data encoded credential
+-}
+pcredentialIntegrityCheck :: Term s (PAsData PCredential) -> Term s PBool
+pcredentialIntegrityCheck term =
+  plet (pasConstr # pforgetData term) $ \constrPair ->
+    plet (pfstBuiltin # constrPair) $ \constrIdx ->
+      plengthBS
+        # (pasByteStr # (pheadSingleton # (psndBuiltin # constrPair)))
+        #== 28
+        #&& (constrIdx #== 0 #|| constrIdx #== 1)
+
+{- | Check if the provided data-encoded term has the expected builtin data representation of a staking credential.
+Return True if the argument is a structurally valid data encoded staking credential
+-}
+pstakingCredentialIntegrityCheck
+  :: Term s (PAsData PStakingCredential) -> Term s PBool
+pstakingCredentialIntegrityCheck term =
+  plet (pasConstr # pforgetData term) $ \constrPair ->
+    plet (pfstBuiltin # constrPair) $ \constrIdx ->
+      pcredentialIntegrityCheck
+        ( punsafeCoerce @(PAsData PCredential)
+            (pheadSingleton # (psndBuiltin # constrPair))
+        )
+        #&& constrIdx
+        #== 0
+
+{- | Check if the provided data-encoded term has the expected builtin data representation of a Maybe staking credential.
+Return True if the argument is a structurally valid data encoded staking credential
+-}
+pmaybeStakingCredentialIntegrityCheck
+  :: Term s (PAsData (PMaybeData PStakingCredential)) -> Term s PBool
+pmaybeStakingCredentialIntegrityCheck term =
+  plet (pasConstr # pforgetData term) $ \maybeConstrPair ->
+    plet (pfstBuiltin # maybeConstrPair) $ \maybeConstrIdx ->
+      (maybeConstrIdx #== 0 #&& (pnull # (psndBuiltin # maybeConstrPair)))
+        #|| ( maybeConstrIdx
+                #== 1
+                #&& pstakingCredentialIntegrityCheck
+                  ( punsafeCoerce @(PAsData PStakingCredential) $
+                      pheadSingleton # (psndBuiltin # maybeConstrPair)
+                  )
+            )
+
+{- | Check if the provided data-encoded term has the expected builtin data representation of an address.
+Return True if the argument is a structurally valid data encoded address
+-}
+paddressIntegrityCheck :: Term s (PAsData PAddress) -> Term s PBool
+paddressIntegrityCheck term =
+  plet (pasConstr # pforgetData term) $ \constrPair ->
+    let constrIdx = pfstBuiltin # constrPair
+        paymentCredential = punsafeCoerce @(PAsData PCredential) $ phead # (psndBuiltin # constrPair)
+        stakeCredential =
+          punsafeCoerce @(PAsData (PMaybeData PStakingCredential)) $
+            phead # (ptail # (psndBuiltin # constrPair))
+     in pand'
+          # pcredentialIntegrityCheck paymentCredential
+          # ( pand'
+                # pmaybeStakingCredentialIntegrityCheck stakeCredential
+                # (constrIdx #== 0)
+            )
