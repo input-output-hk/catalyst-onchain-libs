@@ -40,6 +40,8 @@ import Test.Tasty
 import Test.Tasty.QuickCheck (Arbitrary (..), Gen, Property, forAll, vectorOf)
 import Test.Tasty.QuickCheck qualified as QC
 
+type ClosedTerm a = forall s . Term s a
+
 tests :: TestTree
 tests = testGroup "Merkle tree"
   [ testGroup "Merkle Patricia Forestry Tests"

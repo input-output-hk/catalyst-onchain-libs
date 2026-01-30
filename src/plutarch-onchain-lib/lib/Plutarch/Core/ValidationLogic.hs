@@ -20,7 +20,7 @@ import Plutarch.LedgerApi.AssocMap qualified as AssocMap
 import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
                               PCredential (..), PRedeemer, PScriptPurpose,
                               PTxInInfo, PTxOut (..), PValue)
-import Plutarch.Prelude (ClosedTerm, PAsData, PBool, PBuiltinList, PBuiltinPair,
+import Plutarch.Prelude (PAsData, PBool, PBuiltinList, PBuiltinPair,
                          PEq ((#==)), PInteger, PList,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
                          PUnit, S, Term, pasConstr, pconstant, perror, pfix,
@@ -106,7 +106,7 @@ pcountInputsFromCred =
 emptyValue :: Value
 emptyValue = mempty
 
-pemptyLedgerValue :: ClosedTerm (PValue 'Sorted 'Positive)
+pemptyLedgerValue :: Term s (PValue 'Sorted 'Positive)
 pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
 
 -- | Return the total value spent by all the transaction inputs that are from the provided credential.

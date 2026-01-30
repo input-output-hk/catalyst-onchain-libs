@@ -48,19 +48,19 @@ module Plutarch.Core.Utils(
 ) where
 
 import Data.Text qualified as T
-import Plutarch.Prelude (ClosedTerm, PAdditiveGroup ((#-)), PAsData,
-                         PBool (PFalse), PBuiltinList, PByteString, PEq (..),
-                         PInteger, PIsListLike, PListLike (..), PMaybe (..),
-                         PPair (..), S, Term, TermCont, pand', pany, pcon,
-                         pcond, pconstant, pdiv, pelem, perror, pfix, pfromData,
-                         phoistAcyclic, pif, plam, plet, pmatch, pnot, pquot,
-                         precList, prem, ptraceInfoError, tcont, type (:-->),
-                         (#$), (#&&), (#), (#>), (#>=))
+import Plutarch.Prelude (PAdditiveGroup ((#-)), PAsData, PBool (PFalse),
+                         PBuiltinList, PByteString, PEq (..), PInteger,
+                         PIsListLike, PListLike (..), PMaybe (..), PPair (..),
+                         S, Term, TermCont, pand', pany, pcon, pcond, pconstant,
+                         pdiv, pelem, perror, pfix, pfromData, phoistAcyclic,
+                         pif, plam, plet, pmatch, pnot, pquot, precList, prem,
+                         ptraceInfoError, tcont, type (:-->), (#$), (#&&), (#),
+                         (#>), (#>=))
 
+import GHC.Base (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
                               ptxOutCredential)
 import Plutarch.Core.Value (pvalueContains)
-import Plutarch.Internal.Term (PType)
 import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
                               KeyGuarantees (Sorted),
                               PAddress (paddress'credential),
@@ -87,7 +87,7 @@ ppair a b = pcon (PPair a b)
    Short trace is a sequence of first letters of long trace words.
 -}
 passert ::
-  forall (s :: S) (a :: PType).
+  forall (s :: S) (a :: S -> Type).
   T.Text -> -- long trace
   Term s PBool ->
   Term s a ->
@@ -95,7 +95,7 @@ passert ::
 passert longErrorMsg b inp = pif b inp $ ptraceInfoError (pconstant longErrorMsg)
 
 -- | If the input is True then returns PJust otherwise PNothing
-pcheck :: forall (s :: S) (a :: PType). Term s PBool -> Term s a -> Term s (PMaybe a)
+pcheck :: forall (s :: S) (a :: S -> Type). Term s PBool -> Term s a -> Term s (PMaybe a)
 pcheck b inp = pif b (pcon $ PJust inp) (pcon PNothing)
 
 pfoldl2 ::
@@ -150,7 +150,7 @@ pmapFilter =
         )
         (const pnil)
 
-tcexpectJust :: forall r (a :: PType) (s :: S). Term s r -> Term s (PMaybe a) -> TermCont @r s (Term s a)
+tcexpectJust :: forall r (a :: S -> Type) (s :: S). Term s r -> Term s (PMaybe a) -> TermCont @r s (Term s a)
 tcexpectJust escape ma = tcont $ \f -> pmatch ma $ \case
   PJust v -> f v
   PNothing -> escape
@@ -187,11 +187,11 @@ pgetPubKeyHash addr =
         PPubKeyCredential pkh' -> pkh'
 
 pmapMaybe ::
-  forall (list :: PType -> PType) (a :: PType) (b :: PType).
+  forall (list :: (S -> Type) -> (S -> Type)) (a :: S -> Type) (b :: S -> Type).
   PListLike list =>
   PElemConstraint list a =>
   PElemConstraint list b =>
-  ClosedTerm ((a :--> PMaybe b) :--> list a :--> list b)
+  (forall s . Term s ((a :--> PMaybe b) :--> list a :--> list b))
 pmapMaybe =
   phoistAcyclic $
     plam $ \func ->
@@ -261,11 +261,11 @@ ptxSignedByPkh = pelem
   ensures that in @inputs@ there is an input having @TxOutRef@ @oref@ .
 -}
 phasUTxO ::
-  ClosedTerm
+  (forall s. Term s
     ( PTxOutRef
         :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
-    )
+    ))
 phasUTxO = phoistAcyclic $
   plam $ \oref inInputs ->
     pany @PBuiltinList # plam (\input ->
