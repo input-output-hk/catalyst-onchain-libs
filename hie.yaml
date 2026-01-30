@@ -4,13 +4,19 @@ cradle:
       config:
         cradle:
           none:
+    - path: "src/plutarch-onchain-lib/test/Bench.hs"
+      config:
+        cradle:
+          cabal:
+            - path: "src/plutarch-onchain-lib"
+              component: "plutarch-onchain-lib:plutarch-onchain-lib-bench"
     - path: ""
       config:
         cradle:
           cabal:
-            - path: "./"
+            - path: "src/plutarch-onchain-lib"
               component: "plutarch-onchain-lib:plutarch-onchain-lib"
-            - path: "./"
+            - path: "src/plutarch-onchain-lib"
               component: "plutarch-onchain-lib:plutarch-onchain-lib-tests"
 plugins:
   eval:

@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 
 module Plutarch.Core.Value (
   pfindCurrencySymbolsByTokenPrefix,
@@ -37,12 +38,15 @@ module Plutarch.Core.Value (
   pstripAda,
   ptrySingleTokenCS,
   pupdateAdaInValue,
-
+  pnegateTokens,
+  punionTokens,
+  pvalueEqualsDeltaCurrencySymbol,
   PTriple (..),
 ) where
 
 import Generics.SOP qualified as SOP
 import GHC.Generics (Generic)
+import Plutarch.Builtin.Integer (pconstantInteger)
 import Plutarch.Core.Internal.Builtins (pmapData, ppairDataBuiltinRaw)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.PByteString (pisPrefixOf)
@@ -64,7 +68,7 @@ import Plutarch.Prelude (ClosedTerm, DeriveAsDataRec, PAsData, PBool,
                          pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
                          pif, plam, plength, plet, pmap, pmatch,
                          ppairDataBuiltin, precList, psndBuiltin, pto,
-                         type (:-->), (#$), (#))
+                         type (:-->), (#$), (#), (#<))
 import Plutarch.Repr.Data (DeriveAsDataRec (..))
 import PlutusLedgerApi.V1 (TokenName (..))
 
@@ -561,3 +565,217 @@ pupdateAdaInValue = phoistAcyclic $
         adaEntry = punsafeCoerce $ ppairDataBuiltinRaw # pforgetData padaSymbolData #$ pmapData # punsafeCoerce innerAdaMap
         nonAdaValueMapInner = punsafeCoerce $ pcons # adaEntry # (ptail # pto (pto value))
     in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)
+
+-- | Negates the quantity of each token in a list of token quantity pairs (ie. the inner map of a `PValue`).
+-- Example:
+-- pnegateTokens [("FooToken", 10), ("BarToken", 20)] = [("FooToken", -10), ("BarToken", -20)]
+pnegateTokens :: Term _ (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+pnegateTokens = pfix #$ plam $ \self tokens ->
+  pelimList
+    (\tokenPair tokensRest ->
+      let tokenName = pfstBuiltin # tokenPair
+          tokenAmount = psndBuiltin # tokenPair
+      in pcons # (ppairDataBuiltin # tokenName # pdata (pconstantInteger 0 - pfromData tokenAmount)) # (self # tokensRest)
+    )
+    pnil
+    tokens
+
+-- | Union two sorted lists of token quantity pairs.
+-- This function unions two sorted lists of token quantity pairs, adding the quantities of the tokens that have the same token name.
+punionTokens :: Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)) :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+punionTokens = pfix #$ plam $ \self tokensA tokensB ->
+  pelimList
+    (\tokenPairA tokensRestA ->
+      plet (pfstBuiltin # tokenPairA) $ \tokenNameA ->
+      pelimList
+        (\tokenPairB tokensRestB ->
+           pif (pfromData tokenNameA #== pfromData (pfstBuiltin # tokenPairB))
+               ( -- both entries have the same token so we add quantities
+                let quantityA = pfromData (psndBuiltin # tokenPairA)
+                    quantityB = pfromData (psndBuiltin # tokenPairB)
+                in pcons # (ppairDataBuiltin # tokenNameA # pdata (quantityA + quantityB)) # (self # tokensRestA # tokensRestB)
+               )
+               (
+                pif (pfromData tokenNameA #< pfromData (pfstBuiltin # tokenPairB))
+                    -- entry A has a token that entry B does not so we add the token and quantity from entry A.
+                    (pcons # tokenPairA # (self # tokensRestA # tokensB))
+                    -- entry B has a token that entry A does not so we add the token and quantity from entry B.
+                    ( pcons # tokenPairB # (self # tokensA # tokensRestB))
+               )
+        )
+        pnil tokensB
+    )
+    pnil tokensA
+
+-- |
+-- `pvalueEqualsDeltaCurrencySymbol # progCS # inputUTxOValue # outputUTxOValue` MUST check that inputUTxOValue is equal to outputUTxOValue for all tokens except those of currency symbol progCS.
+-- The function should return a value consisting of only tokens with the currency symbol progCS, this value is as follows: For each token t of currency symbol progCS, the quantity of the token
+-- in the return value rValue is the quantity of token t in inputUTxOValue minus the quantity of token t in outputUTxOValue.
+-- When t exists in either inputUTxOValue or outputUTxOValue but doesn't exist in the other value, then the quantity for the value which t doesn't exist in should be considered 0
+-- for the purposes of the subtraction ie. if inputUTxOValue has 0 FooToken and outputUTxOValue has 10 FooToken then rValue should have 0 - 10 = -10 FooToken.
+--
+pvalueEqualsDeltaCurrencySymbol ::
+  forall anyOrder anyAmount s.
+  Term
+    s
+    ( PCurrencySymbol
+        :--> PAsData (PValue anyOrder anyAmount)
+        :--> PAsData (PValue anyOrder anyAmount)
+        :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+    )
+pvalueEqualsDeltaCurrencySymbol = plam $ \progCS inputUTxOValue outputUTxOValue ->
+  let innerInputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
+      innerInputValue = pto (pto $ pfromData inputUTxOValue)
+      innerOutputValue :: Term _ (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger))))
+      innerOutputValue = pto (pto $ pfromData outputUTxOValue)
+
+      psubtractTokens ::
+        Term _ (
+          PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+            :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+        )
+      psubtractTokens =
+        pfix #$ plam $ \self inputTokens outputTokens ->
+          pelimList
+            (\inputPair inputRest ->
+              plet (pfstBuiltin # inputPair) $ \inputTokenName ->
+              let inputTokenAmount = psndBuiltin # inputPair
+              in pelimList
+                  (\outputPair outputRest ->
+                    let outputTokenName   = pfstBuiltin # outputPair
+                        outputTokenAmount = psndBuiltin # outputPair
+                    in
+                    pif (pfromData inputTokenName #<= pfromData outputTokenName)
+                        ( -- inputTokenName <= outputTokenName
+                          pif (inputTokenName #== outputTokenName)
+                            ( -- names equal → diff = input − output; skip if zero
+                              let diff = pfromData inputTokenAmount - pfromData outputTokenAmount
+                              in pif (diff #== 0)
+                                    (self # inputRest # outputRest)
+                                    (pcons
+                                        # (ppairDataBuiltin # inputTokenName # pdata diff)
+                                        # (self # inputRest # outputRest))
+                            )
+                            ( -- outputTokenName > inputTokenName → token only in input (nonzero by invariant)
+                              let diff = pfromData inputTokenAmount
+                              in pcons
+                                    # (ppairDataBuiltin # inputTokenName # pdata diff)
+                                    # (self # inputRest # outputTokens)
+                            )
+                        )
+                        ( -- outputTokenName < inputTokenName → token only in output (nonzero by invariant)
+                          let diff = pconstantInteger 0 - pfromData outputTokenAmount
+                          in pcons
+                                # (ppairDataBuiltin # outputTokenName # pdata diff)
+                                # (self # inputTokens # outputRest)
+                        )
+                  )
+                  -- output exhausted → emit remaining input tokens as positive (nonzero by invariant)
+                  inputRest
+                  outputTokens
+            )
+            -- input exhausted → emit remaining output tokens as negative (nonzero by invariant)
+            (pnegateTokens # outputTokens)
+            inputTokens
+
+      -- no need to check for progCs in "everything should be same" parts
+      -- input  : |- everything should be same -| |-progCs-| |-everything should be same-|
+      -- output : |- everything should be same -| |-progCs-| |-everything should be same-|
+
+      -- once input reaches progCs, only need to check if output have progCs and if not, assume zero
+      -- input  : |- everything should be same -| |-progCs-| |-everything should be same-|
+      -- output : |- everything should be same -| |-everything should be same-|
+      goOuter ::
+        Term _
+          ( PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger)))
+              :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap anyOrder PTokenName PInteger)))
+              :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))  -- accumulator (delta for progCS)
+              :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
+          )
+      goOuter = pfix #$ plam $ \self inputValuePairs outputValuePairs diffAccumulator ->
+                  pelimList
+                    (\inputValueEntry inputValueEntries ->
+                      plet (pfstBuiltin # inputValueEntry) $ \inputValueEntryCS ->
+                      pelimList
+                        (\outputValueEntry outputValueEntries ->
+                            pif (pfromData inputValueEntryCS #== pfromData (pfstBuiltin # outputValueEntry))
+                              (pif (pfromData inputValueEntryCS #== progCS)
+                                  -- (pif (pdata (punsafeCoerce @(PBuiltinList PData) outputValueEntries) #== pdata (punsafeCoerce @(PBuiltinList PData) inputValueEntries))
+                                  (pif  (pmapData # punsafeCoerce outputValueEntries #== pmapData # punsafeCoerce inputValueEntries)
+                                        (psubtractTokens # pto (pfromData (psndBuiltin # inputValueEntry)) # pto (pfromData @(PMap anyOrder PTokenName PInteger) (psndBuiltin # outputValueEntry)))
+                                        perror
+                                  )
+                                  (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) (self # inputValueEntries # outputValueEntries # diffAccumulator) perror)
+                              )
+                              (pif (psndBuiltin # inputValueEntry #== psndBuiltin # outputValueEntry) diffAccumulator perror)
+
+                        ) pnil outputValuePairs
+                    ) pnil inputValuePairs
+   in goOuter # innerInputValue # innerOutputValue # pnil
+
+-- `pvalueEqualsDeltaCurrencySymbolFast` is a very efficient variant of `pvalueEqualsDeltaCurrencySymbol`
+-- that takes advantage of the `serialiseData` builtin and the redeemer-indexing design pattern to produce the result
+-- without traversing the entirety of either value; only the relevant entry (the `progCS` entry) of each value is traversed.
+-- pvalueEqualsDeltaCurrencySymbolFast ::
+--   Term s PInteger
+--     -> Term s PInteger
+--     -> Term s PInteger
+--     -> Term s PInteger
+--     -> Term s (PAsData (PValue anyOrder anyAmount))
+--     -> Term s (PAsData (PValue anyOrder anyAmount))
+--     -> Term s (PAsData (PMap anyOrder PTokenName PInteger))
+--     -> Term s (PAsData (PMap anyOrder PTokenName PInteger))
+
+--     -> Term s
+-- pvalueEqualsDeltaCurrencySymbolFast prefixStartIdx prefixEndIdx postfixStartIdx postfixEndIdx inputValue outputValue progCSEntryAUntrusted progCSEntryBUntrusted =
+--   ptraceError "pvalueEqualsDeltaCurrencySymbolFast: TODO"
+
+-- Below is a pseudocode implementation in Plinth.
+-- If the need arises we can port this to Plutarch.
+-- pvalueEqualsDeltaCurrencySymbolFast
+-- let valueABytes = serialiseData inputValue
+--     valueBBytes = serialiseData outputValue
+--     everythingShouldBeSamePrefixStartIdx = prefixStartIdx redeemer
+--     everythingShouldBeSamePrefixEndIdx = prefixEndIdx redeemer
+--     everythingShouldBeSamePostfixStartIdx = postfixStartIdx redeemer
+--     everythingShouldBeSamePostfixEndIdx = postfixEndIdx redeemer
+--     everythingShouldBeSamePrefixBytesValueA =
+--       sliceByteString
+--         everythingShouldBeSamePrefixStartIdx
+--         everythingShouldBeSamePrefixEndIdx
+--         valueABytes
+--     everythingShouldBeSamePrefixBytesValueB =
+--       sliceByteString
+--         everythingShouldBeSamePrefixStartIdx
+--         everythingShouldBeSamePrefixEndIdx
+--         valueBBytes
+--     everythingShouldBeSamePostfixBytesValueA =
+--       sliceByteString
+--         everythingShouldBeSamePostfixStartIdx
+--         everythingShouldBeSamePostfixEndIdx
+--         valueABytes
+--     everythingShouldBeSamePostfixBytesValueB =
+--       sliceByteString
+--         everythingShouldBeSamePostfixStartIdx
+--         everythingShouldBeSamePostfixEndIdx
+--         valueBBytes
+--     progCSEntryABytes =
+--       sliceByteString
+--         everythingShouldBeSamePrefixEndIdx
+--         everythingShouldBeSamePostfixStartIdx
+--         valueABytes
+--     progCSEntryBBytes =
+--       sliceByteString
+--         everythingShouldBeSamePrefixEndIdx
+--         everythingShouldBeSamePostfixStartIdx
+--         valueBBytes
+--     progCSEntryAUntrusted = progCSEntry redeemer
+--     progCSEntryBUntrusted = progCSEntry redeemer
+--  in if (everythingShouldBeSamePrefixBytesValueA == everythingShouldBeSamePrefixBytesValueB
+--          && everythingShouldBeSamePostfixBytesValueA == everythingShouldBeSamePostfixBytesValueB
+--          && serialiseData progCSEntryAUntrusted == progCSEntryABytes
+--          && serialiseData progCSEntryBUntrusted == progCSEntryBBytes
+--        )
+--        (subtractTokens progCSEntryAUntrusted progCSEntryBUntrusted)
+--        error

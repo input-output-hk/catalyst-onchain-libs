@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns         #-}
 {-# LANGUAGE CPP                  #-}
 {-# LANGUAGE OverloadedRecordDot  #-}
 {-# LANGUAGE OverloadedStrings    #-}
@@ -8,11 +9,15 @@
 
 module Main (main) where
 
+import Debug.Trace qualified as Debug
+import Plutarch.Builtin.Integer (pconstantInteger)
 import Plutarch.Core.Context (ptxInInfoResolved, ptxOutCredential)
 import Plutarch.Core.List
 import Plutarch.Core.Unroll
 import Plutarch.Core.ValidationLogic
+import Plutarch.Evaluate
 import Plutarch.Internal.Lift
+import Plutarch.Internal.Other (printTerm)
 import Plutarch.Internal.Term
 import Plutarch.LedgerApi.V3
 import Plutarch.Maybe
@@ -98,7 +103,16 @@ main =
       , testGroup "Elem At" elemAtBenches
       , testGroup "Unroll" unrollBench
       , testGroup "Integer Bitmask" integerBitMaskBenches
+      , testGroup "Negation" negationBenches
+      , testGroup "ByteString Equality" benchByteStringEquality
+      , testGroup "Convert List" convertListBenches
       ]
+
+convertListBenches :: [TestTree]
+convertListBenches =
+  [ bench "convert list pmapBuiltinListDataToIntegerFast" (pmapBuiltinListDataToIntegerFast # 50 # pconstant @(PBuiltinList PData) (fmap PlutusTx.toData ([1..50] :: [Integer])))
+  , bench "convert list pmap" (pmap # plam pfromData # pconstant @(PBuiltinList (PAsData PInteger)) [1..50])
+  ]
 
 dropBenches :: [TestTree]
 dropBenches =
@@ -200,3 +214,29 @@ integerBitMaskBenches =
           c2 = psetBitInteger # c1 # 9
        in psetBitInteger # c2 # 8
   ]
+
+pnegateSubtract :: Term s PInteger -> Term s PInteger
+pnegateSubtract n = pconstantInteger 0 #- n
+
+pnegateScale :: Term s PInteger -> Term s PInteger
+pnegateScale n = pconstantInteger (-1) #* n
+
+negationBenches :: [TestTree]
+negationBenches =
+  [ bench "negate subtract" $ pnegateSubtract (pconstantInteger 100000000000000000000000) -- 181728
+  , bench "negate scale" $ pnegateScale (pconstantInteger 100000000000000000000000) -- 171572
+  ]
+
+-- >>> printTerm NoTracing $ pconstant @(PAsData PCurrencySymbol) (CurrencySymbol "deadbeef") #== pconstant @(PAsData PCurrencySymbol) (CurrencySymbol "deadbeef")
+-- >>> printTerm NoTracing $ pconstant @PByteString "hello" #== pconstant @PByteString "hello"
+benchByteStringEquality :: [TestTree]
+benchByteStringEquality =
+  let termA = unsafeEvalTerm NoTracing $ pconstant @(PAsData PCurrencySymbol) (CurrencySymbol "deadbeef")
+      termB = unsafeEvalTerm NoTracing $ pconstant @(PAsData PCurrencySymbol) (CurrencySymbol "deadbeef")
+  in
+    Debug.trace (printTerm NoTracing $ termA #== termB) $
+      Debug.trace (printTerm NoTracing $ pconstant @PByteString "hello" #== pconstant @PByteString "hello") $
+        [ bench "bytestring as data equality" $ pconstant @(PAsData PCurrencySymbol) (CurrencySymbol "deadbeef") #== pconstant @(PAsData PCurrencySymbol) (CurrencySymbol "deadbeef")
+        , bench "bytestring equality" $ pconstant @PByteString "hello" #== pconstant @PByteString "hello"
+        ]
+

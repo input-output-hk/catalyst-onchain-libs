@@ -65,6 +65,7 @@ library
     Plutarch.Core.Eval
     Plutarch.Core.Integrity
     Plutarch.Core.Internal.Builtins
+    Plutarch.Core.Internal.Conditionals
     Plutarch.Core.List
     Plutarch.Core.PByteString
     Plutarch.Core.Scripts
@@ -105,6 +106,7 @@ test-suite plutarch-onchain-lib-tests
   other-modules:
     Plutarch.List.Test
     Plutarch.MerkleTree.Test
+    Plutarch.Value.Test
     TestUtils
 
   hs-source-dirs: test
@@ -118,6 +120,7 @@ test-suite plutarch-onchain-lib-tests
     , plutarch-testlib
     , plutus-core
     , plutus-ledger-api
+    , plutus-tx
     , quickcheck-instances
     , tasty
     , tasty-hunit
