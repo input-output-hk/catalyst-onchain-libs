@@ -13,6 +13,14 @@
 {-# LANGUAGE UndecidableInstances  #-}
 
 module Plutarch.Core.Value (
+  -- * Value representation
+  -- $representation
+  pvalueCsPairs,
+  pledgerValueCsPairs,
+  ptokenPairs,
+  pmkSortedValue,
+  pmkLedgerValue,
+
   pfindCurrencySymbolsByTokenPrefix,
   pfindCurrencySymbolsByTokenName,
   phasDataCS,
@@ -66,6 +74,27 @@ import Plutarch.Prelude (DeriveAsDataRec, PAsData, PBool, PBuiltinList,
 import Plutarch.Repr.Data (DeriveAsDataRec (..))
 import PlutusLedgerApi.V1 (TokenName (..))
 
+{- $representation
+
+plutarch-ledger-api 3.7.0 stopped exporting the constructors of the value and
+map types, so their representation is reached with 'pto' rather than by pattern
+matching, and each type sits at a different depth:
+
+@
+PAssocMap k v                    pto x1  -- the builtin pair list
+PSortedMap / PUnsortedMap        pto x2
+PSortedValue / PRawValue         pto x3
+PLedgerValue / PMintValue        pto x4
+@
+
+The old @PValue@ reached its pair list in two, so every pre-3.7.0 @pto (pto v)@
+is now short by one or two. A miscount typechecks in some positions and not
+others -- @pto@ applied once to a 'AssocMap.PSortedMap' yields a
+'AssocMap.PAssocMap', which anything list-polymorphic will happily accept.
+These accessors exist so the depth is written down once, here, instead of at
+every use site.
+-}
+
 {- | The currency-symbol / token-map pairs underlying a sorted value.
 
 plutarch-ledger-api 3.7.0 replaced the phantom-tagged @PSortedValue@
@@ -80,6 +109,19 @@ pvalueCsPairs ::
   Term s PSortedValue ->
   Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))))
 pvalueCsPairs v = pto (pto (pto v))
+
+{- | The currency-symbol / token-map pairs underlying a ledger value.
+
+'PLedgerValue' is a newtype over 'PSortedValue', so its representation sits one
+'pto' deeper than 'pvalueCsPairs'. The same holds for
+@Plutarch.LedgerApi.V3.MintValue.PMintValue@; coerce a mint to 'PSortedValue'
+and use 'pvalueCsPairs' for that one.
+-}
+pledgerValueCsPairs ::
+  forall (s :: S).
+  Term s PLedgerValue ->
+  Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))))
+pledgerValueCsPairs = pvalueCsPairs . pto
 
 -- | The token-name / quantity pairs of a sorted token map.
 ptokenPairs ::
@@ -102,6 +144,19 @@ pmkSortedValue ::
   Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger)))) ->
   Term s PSortedValue
 pmkSortedValue = punsafeCoerce
+
+{- | Rebuild a ledger value from its currency-pair list.
+
+Carries the soundness obligation of 'pmkSortedValue', and additionally the
+non-negativity that 'PLedgerValue' asserts over 'PSortedValue': the caller must
+supply quantities that are already known positive, which in practice means
+deriving them from an existing ledger value rather than from arithmetic.
+-}
+pmkLedgerValue ::
+  forall (s :: S).
+  Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger)))) ->
+  Term s PLedgerValue
+pmkLedgerValue = punsafeCoerce
 
 adaTokenName :: TokenName
 adaTokenName = TokenName ""
