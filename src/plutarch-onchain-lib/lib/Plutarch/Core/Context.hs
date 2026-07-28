@@ -18,16 +18,15 @@ module Plutarch.Core.Context (
 
 import Plutarch.Core.Integrity (pfromJustData)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
-import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
-                              KeyGuarantees (Sorted),
-                              PAddress (paddress'credential, paddress'stakingCredential),
+import Plutarch.LedgerApi.V3 (PAddress (paddress'credential, paddress'stakingCredential),
                               PCredential, PDatum (PDatum), PMaybeData,
                               POutputDatum (POutputDatum), PPubKeyHash,
                               PScriptContext (pscriptContext'txInfo),
                               PStakingCredential,
                               PTxInInfo (ptxInInfo'outRef, ptxInInfo'resolved),
                               PTxInfo (ptxInfo'signatories), PTxOut (..),
-                              PTxOutRef, PValue)
+                              PTxOutRef)
+import Plutarch.LedgerApi.Value (PLedgerValue)
 import Plutarch.Prelude (PAsData, PBuiltinList, PData, Term, pcon, pconstant,
                          pdata, perror, pmatch, pto)
 
@@ -61,7 +60,7 @@ ptxOutCredential :: Term s PTxOut -> Term s PCredential
 ptxOutCredential =
   paddressCredential . ptxOutAddress
 
-ptxOutValue :: Term s PTxOut -> Term s (PAsData (PValue 'AssocMap.Sorted 'Positive))
+ptxOutValue :: Term s PTxOut -> Term s (PAsData (PLedgerValue))
 ptxOutValue =
   flip pmatch $ \txo ->
     ptxOut'value txo
@@ -98,7 +97,7 @@ ptxInfoSignatories =
   flip pmatch $ \txInfo ->
     ptxInfo'signatories txInfo
 
-pconstructExpectedOutput :: Term s PAddress -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s PData -> Term s (PAsData PTxOut)
+pconstructExpectedOutput :: Term s PAddress -> Term s (PAsData (PLedgerValue)) -> Term s PData -> Term s (PAsData PTxOut)
 pconstructExpectedOutput address value datum =
   pdata $ pcon $
     PTxOut
@@ -108,7 +107,7 @@ pconstructExpectedOutput address value datum =
      , ptxOut'referenceScript = pconstant Nothing
      }
 
-pconstructExpectedOutputWithOutputDatum :: Term s PAddress -> Term s (PAsData (PValue 'Sorted 'Positive)) -> Term s POutputDatum -> Term s (PAsData PTxOut)
+pconstructExpectedOutputWithOutputDatum :: Term s PAddress -> Term s (PAsData (PLedgerValue)) -> Term s POutputDatum -> Term s (PAsData PTxOut)
 pconstructExpectedOutputWithOutputDatum address value datum =
   pdata $ pcon $
     PTxOut

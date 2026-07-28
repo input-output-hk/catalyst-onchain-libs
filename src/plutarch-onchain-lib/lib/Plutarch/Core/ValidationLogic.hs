@@ -17,9 +17,9 @@ import Plutarch.Core.Context (paddressCredential, ptxInInfoResolved,
 import Plutarch.Core.List (pdropFast)
 import Plutarch.Core.Utils (pand'List)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
-import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
-                              PCredential (..), PRedeemer, PScriptPurpose,
-                              PTxInInfo, PTxOut (..), PValue)
+import Plutarch.LedgerApi.V3 (PCredential (..), PRedeemer, PScriptPurpose,
+                              PTxInInfo, PTxOut (..))
+import Plutarch.LedgerApi.Value (PLedgerValue, PRawValue)
 import Plutarch.Prelude (PAsData, PBool, PBuiltinList, PBuiltinPair,
                          PEq ((#==)), PInteger, PList,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
@@ -37,7 +37,7 @@ import PlutusLedgerApi.V3 (Value)
 
     This assumption holds true for any valid transaction, because it is enforced by the ledger rules.
 -}
-penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PBool
+penforceNSpendRedeemers :: forall {s :: S}. Term s PInteger -> Term s (AssocMap.PUnsortedMap PScriptPurpose PRedeemer) -> Term s PBool
 penforceNSpendRedeemers n rdmrs =
     let isNonSpend :: Term (w :: S) (PAsData PScriptPurpose) -> Term (w :: S) PBool
         isNonSpend red = pnot # (pfstBuiltin # (pasConstr # pforgetData red) #== 1)
@@ -51,7 +51,7 @@ penforceNSpendRedeemers n rdmrs =
                 (constrIdx #== 1)
                 (pelimList (\x _ -> isNonSpend (pfstBuiltin # x)) (pconstant True) (ptail # redeemers))
                 perror
-     in isLastSpend # (pdropFast # (n - 1) # pto rdmrs)
+     in isLastSpend # (pdropFast # (n - 1) # pto (pto rdmrs))
 
 {- | Count the number of spend plutus scripts executed in the transaction via the txInfoRedeemers list.
     Assumes that the txInfoRedeemers list is sorted according to the ledger Ord instance for PlutusPurpose:
@@ -60,7 +60,7 @@ penforceNSpendRedeemers n rdmrs =
 
     This assumption holds true for any valid transaction, because it is enforced by the ledger rules.
 -}
-pcountSpendRedeemers :: forall {s :: S}. Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PInteger
+pcountSpendRedeemers :: forall {s :: S}. Term s (AssocMap.PUnsortedMap PScriptPurpose PRedeemer) -> Term s PInteger
 pcountSpendRedeemers rdmrs =
     let go :: Term (s :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PInteger)
         go = pfixHoisted #$ plam $ \self n ->
@@ -72,7 +72,7 @@ pcountSpendRedeemers rdmrs =
                   in pif (constrIdx #== 1) (self # (n + 1) # xs) n
                 )
                 n
-     in go # 0 # pto rdmrs
+     in go # 0 # pto (pto rdmrs)
 
 -- | Count the number of script inputs in the transaction inputs list.
 pcountScriptInputs :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PInteger)
@@ -106,11 +106,11 @@ pcountInputsFromCred =
 emptyValue :: Value
 emptyValue = mempty
 
-pemptyLedgerValue :: Term s (PValue 'Sorted 'Positive)
-pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) emptyValue
+pemptyLedgerValue :: Term s PLedgerValue
+pemptyLedgerValue = punsafeCoerce $ pconstant @PRawValue emptyValue
 
 -- | Return the total value spent by all the transaction inputs that are from the provided credential.
-pvalueFromCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PValue 'Sorted 'Positive)
+pvalueFromCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PLedgerValue)
 pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
   (pfixHoisted #$ plam $ \self acc ->
     pelimList
@@ -128,7 +128,7 @@ pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
   # inputs
 
 -- | Return the total value produced by all the transaction outputs that are to the provided credential.
-pvalueToCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxOut) :--> PValue 'Sorted 'Positive)
+pvalueToCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxOut) :--> PLedgerValue)
 pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
   let value = (pfixHoisted #$ plam $ \self acc ->
                 pelimList

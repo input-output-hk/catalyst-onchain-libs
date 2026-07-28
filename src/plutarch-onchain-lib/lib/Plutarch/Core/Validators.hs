@@ -17,7 +17,7 @@ import Plutarch.LedgerApi.V3 (PPubKeyHash, PScriptContext (..),
 import Plutarch.Monadic qualified as P
 import Plutarch.Prelude (PAsData, PData, PEq ((#==)), PUnit, Term, pconstant,
                          perror, pfromData, pfstBuiltin, plam, plet, pmatch,
-                         psndBuiltin, type (:-->), (#))
+                         psndBuiltin, pto, type (:-->), (#))
 import PlutusLedgerApi.V3 (TokenName)
 
 -- | A one-shot minting policy that allows minting a single token with a given token name.
@@ -29,7 +29,9 @@ mkNFTMinting tn = plam $ \oref ctx -> P.do
   PScriptContext {pscriptContext'txInfo, pscriptContext'scriptInfo} <- pmatch ctx
   PTxInfo {ptxInfo'inputs, ptxInfo'mint} <- pmatch pscriptContext'txInfo
   PMintingScript ownCS <- pmatch pscriptContext'scriptInfo
-  mintedValue <- plet $ pfromData ptxInfo'mint
+  -- ptxInfo'mint is a PMintValue in plutarch-ledger-api 3.7.0; it is a newtype
+  -- over PSortedValue whose constructor is not exported, so unwrap with pto.
+  mintedValue <- plet $ pto (pfromData ptxInfo'mint)
   let ownTkPairs = ptryLookupValue # ownCS # mintedValue
   -- Enforce that only a single token name is minted for this policy
   ownTkPair <- plet (pheadSingleton # ownTkPairs)

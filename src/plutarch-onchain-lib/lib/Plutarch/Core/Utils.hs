@@ -61,21 +61,20 @@ import GHC.Base (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
                               ptxOutCredential)
 import Plutarch.Core.Value (pvalueContains)
-import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
-                              KeyGuarantees (Sorted),
-                              PAddress (paddress'credential),
+import Plutarch.LedgerApi.V3 (PAddress (paddress'credential),
                               PCredential (PPubKeyCredential, PScriptCredential),
                               PMaybeData, POutputDatum, PPubKeyHash,
                               PScriptHash, PTxInInfo (..),
                               PTxOut (PTxOut, ptxOut'address, ptxOut'value),
-                              PTxOutRef, PValue)
+                              PTxOutRef)
+import Plutarch.LedgerApi.Value (PLedgerValue)
 import Plutarch.Monadic qualified as P
 import Prelude
 
 data PTxOutH (s :: S) =
   PTxOutH
     { ptxOutAddressH         :: Term s PAddress
-    , ptxOutValueH           :: Term s (PValue 'Sorted 'Positive)
+    , ptxOutValueH           :: Term s (PLedgerValue)
     , ptxOutDatumH           :: Term s POutputDatum
     , ptxOutReferenceScriptH :: Term s (PMaybeData PScriptHash)
     }
@@ -159,14 +158,14 @@ paysToAddress :: Term s (PAddress :--> PTxOut :--> PBool)
 paysToAddress = phoistAcyclic $ plam $ \adr txOut -> adr #== ptxOutAddress txOut
 
 paysValueToAddress ::
-  Term s (PValue 'Sorted 'Positive :--> PAddress :--> PTxOut :--> PBool)
+  Term s (PLedgerValue :--> PAddress :--> PTxOut :--> PBool)
 paysValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
     pmatch txOut $ \(PTxOut {ptxOut'address, ptxOut'value}) ->
       ptxOut'address #== adr #&& pvalueContains # val # pfromData ptxOut'value
 
 paysAtleastValueToAddress ::
-  Term s (PValue 'Sorted 'Positive :--> PAddress :--> PTxOut :--> PBool)
+  Term s (PLedgerValue :--> PAddress :--> PTxOut :--> PBool)
 paysAtleastValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
     pmatch txOut $ \(PTxOut {ptxOut'address, ptxOut'value}) ->
