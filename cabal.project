@@ -15,15 +15,17 @@ repository cardano-haskell-packages
     d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
 
 index-state:
-  , hackage.haskell.org 2025-08-14T14:31:31Z
-  , cardano-haskell-packages 2025-08-14T14:31:31Z
+  , hackage.haskell.org 2026-05-31T00:00:00Z
+  , cardano-haskell-packages 2026-05-31T00:00:00Z
 
 with-compiler: ghc-9.6.6
 
 constraints:
-  -- These need to be bumped whenever plutarch builds successfully with a higher version number.
-  , plutus-core < 1.52.0.0
-  , plutus-ledger-api < 1.52.0.0
+  -- Pinned to what upstream Plutarch 1.14.0 requires (it pins plutus-core
+  -- ==1.65.0.0 exactly, so this is not a floor but the exact version).
+  , plutus-core == 1.65.0.0
+  , plutus-ledger-api == 1.65.0.0
+  , plutus-tx == 1.65.0.0
 
 allow-newer:
   -- These constraints are taken from Plutarch.
@@ -35,13 +37,14 @@ allow-newer:
 packages:
     src/plutarch-onchain-lib
 
-source-repository-package
-    type: git
-    location: https://github.com/choener/plutarch-plutus
-    tag: 99315dada86e042bbc1dee5c5ccae158119031eb
-    --sha256: sha256-kgjYtDcqqEsF61QqK5eoxwL4Gbj9A0tAAqw6xH01NB0=
-    subdir:
-      .
-      plutarch-ledger-api
-      plutarch-orphanage
-      plutarch-testlib
+-- Upstream Plutarch c3b47719 (1.14.0) with ONE line removed: a stray
+-- {-# LANGUAGE TypeAbstractions #-} in Plutarch/Internal/Parse.hs. That
+-- extension is GHC 9.8+, but upstream's own plutarch.cabal declares
+-- `tested-with: GHC ==9.6.4` and nothing in the file uses type-abstraction
+-- syntax -- every `@a` in it is an ordinary type APPLICATION. Consumed from a
+-- local checkout while we confirm that; upstreaming the deletion is the fix.
+packages:
+    /home/gumbo/iohk/plutarch-1.14-patched
+    /home/gumbo/iohk/plutarch-1.14-patched/plutarch-ledger-api
+    /home/gumbo/iohk/plutarch-1.14-patched/plutarch-orphanage
+    /home/gumbo/iohk/plutarch-1.14-patched/plutarch-testlib

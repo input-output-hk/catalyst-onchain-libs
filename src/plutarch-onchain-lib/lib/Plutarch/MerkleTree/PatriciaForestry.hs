@@ -249,7 +249,7 @@ pupdate = phoistAcyclic $ plam $ \self key_ proof oldValue newValue ->
 pexcluding :: Term s (PByteString  :--> PProof :--> PByteString)
 pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
   let go :: Term _ (PInteger :--> PBuiltinList (PAsData PProofStep) :--> PByteString)
-      go = pfix #$ plam $ \self cursor steps ->
+      go = pfixHoisted #$ plam $ \self cursor steps ->
         pmatch steps $ \case
           PNil -> pnull_hash
           PCons x xs ->
@@ -301,7 +301,7 @@ pexcluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) proof ->
 pincluding :: Term s (PByteString :--> PByteString :--> PProof :--> PByteString)
 pincluding = phoistAcyclic $ plam $ \((pblake2b_256 #) -> path) ((pblake2b_256 #) -> value_) proof ->
   let go :: Term _ (PInteger :--> PBuiltinList (PAsData PProofStep) :--> PByteString)
-      go = pfix #$ plam $ \self cursor steps ->
+      go = pfixHoisted #$ plam $ \self cursor steps ->
         pelimList (\proofStep ys ->
           pmatch (pfromData proofStep) $ \case
             PBranch {pproofStep'skip, pproofStep'neighbors} ->

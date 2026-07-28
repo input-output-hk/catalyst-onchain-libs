@@ -35,7 +35,7 @@ psuffix = phoistAcyclic $ plam $ \path cursor ->
 -- Calculate nibbles for a branch node
 pnibbles :: Term s (PByteString :--> PInteger :--> PInteger :--> PByteString)
 pnibbles = phoistAcyclic $ plam $ \path start end ->
-  (pfix #$ plam (\self s ->
+  (pfixHoisted #$ plam (\self s ->
       pif
         (s #>= end)
         (pconstant BS.empty)

@@ -23,10 +23,10 @@ import Plutarch.LedgerApi.V3 (AmountGuarantees (..), KeyGuarantees (..),
 import Plutarch.Prelude (PAsData, PBool, PBuiltinList, PBuiltinPair,
                          PEq ((#==)), PInteger, PList,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
-                         PUnit, S, Term, pasConstr, pconstant, perror, pfix,
-                         pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
-                         pif, plam, plet, pmatch, pnot, pto, type (:-->), (#$),
-                         (#))
+                         PUnit, S, Term, pasConstr, pconstant, perror,
+                         pfixHoisted, pforgetData, pfromData, pfstBuiltin,
+                         phoistAcyclic, pif, plam, plet, pmatch, pnot, pto,
+                         type (:-->), (#$), (#))
 import Plutarch.Unsafe (punsafeCoerce)
 import PlutusLedgerApi.V3 (Value)
 
@@ -63,7 +63,7 @@ penforceNSpendRedeemers n rdmrs =
 pcountSpendRedeemers :: forall {s :: S}. Term s (AssocMap.PMap 'AssocMap.Unsorted PScriptPurpose PRedeemer) -> Term s PInteger
 pcountSpendRedeemers rdmrs =
     let go :: Term (s :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PScriptPurpose) (PAsData PRedeemer)) :--> PInteger)
-        go = pfix #$ plam $ \self n ->
+        go = pfixHoisted #$ plam $ \self n ->
               pelimList
                 (\x xs ->
                   let constrPair :: Term (s :: S) (PAsData PScriptPurpose)
@@ -79,7 +79,7 @@ pcountScriptInputs :: Term s (PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 pcountScriptInputs =
   phoistAcyclic $
     let go :: Term s (PInteger :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
-        go = pfix #$ plam $ \self n ->
+        go = pfixHoisted #$ plam $ \self n ->
               pelimList
                 (\x xs ->
                   let cred = ptxOutCredential $ ptxInInfoResolved (pfromData x)
@@ -94,7 +94,7 @@ pcountScriptInputs =
 pcountInputsFromCred :: Term (s :: S) (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PInteger)
 pcountInputsFromCred =
   phoistAcyclic $ plam $ \cred txIns ->
-    let go = pfix #$ plam $ \self n ->
+    let go = pfixHoisted #$ plam $ \self n ->
               pelimList
                 (\x xs ->
                   let inputCred = ptxOutCredential $ ptxInInfoResolved $ pfromData x
@@ -112,7 +112,7 @@ pemptyLedgerValue = punsafeCoerce $ pconstant @(PValue 'Unsorted 'NoGuarantees) 
 -- | Return the total value spent by all the transaction inputs that are from the provided credential.
 pvalueFromCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PValue 'Sorted 'Positive)
 pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
-  (pfix #$ plam $ \self acc ->
+  (pfixHoisted #$ plam $ \self acc ->
     pelimList
       (\txIn xs ->
         self
@@ -130,7 +130,7 @@ pvalueFromCred = phoistAcyclic $ plam $ \cred inputs ->
 -- | Return the total value produced by all the transaction outputs that are to the provided credential.
 pvalueToCred :: Term s (PCredential :--> PBuiltinList (PAsData PTxOut) :--> PValue 'Sorted 'Positive)
 pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
-  let value = (pfix #$ plam $ \self acc ->
+  let value = (pfixHoisted #$ plam $ \self acc ->
                 pelimList
                   (\txOut xs ->
                     self
@@ -149,7 +149,7 @@ pvalueToCred = phoistAcyclic $ plam $ \cred inputs ->
 -- | Return the transaction inputs that are from the provided credential.
 pinputsFromCredential :: Term s (PCredential :--> PBuiltinList (PAsData PTxInInfo) :--> PList PTxOut)
 pinputsFromCredential = phoistAcyclic $ plam $ \cred txIns ->
-  let go = pfix #$ plam $ \self acc ->
+  let go = pfixHoisted #$ plam $ \self acc ->
             pelimList
               (\x xs ->
                   plet (ptxInInfoResolved $ pfromData x) $ \txInOut->

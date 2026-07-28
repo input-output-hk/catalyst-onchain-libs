@@ -59,7 +59,7 @@ import Plutarch.Prelude (DeriveAsDataRec, PAsData, PBool, PBuiltinList,
                          PBuiltinPair, PByteString, PEq (..), PInteger,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
                          POrd ((#<=)), S, Term, pall, pany, pcon, pconstant,
-                         pdata, pelem, perror, pfilter, pfix, pfoldl,
+                         pdata, pelem, perror, pfilter, pfixHoisted, pfoldl,
                          pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
                          pif, plam, plength, plet, pmap, pmatch,
                          ppairDataBuiltin, precList, psndBuiltin, pto,
@@ -428,7 +428,7 @@ pfilterCSFromValue ::
 pfilterCSFromValue = phoistAcyclic $
   plam $ \value policyId ->
       let mapVal = pto (pto value)
-          go = pfix #$ plam $ \self ys ->
+          go = pfixHoisted #$ plam $ \self ys ->
                 pelimList (\x xs -> pif (pfstBuiltin # x #== policyId) xs (pcons # x # (self # xs))) pnil ys
        in pcon (PValue $ pcon $ PMap $ go # mapVal)
 
@@ -462,7 +462,7 @@ pvalueContains = phoistAcyclic $
 --     )
 -- pvalueContainsFast = phoistAcyclic $ plam $ \superValue subValue ->
 --   let go :: Term (s2 :: S) (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBool)
---       go = pfix #$ plam $ \self superSet subSet ->
+--       go = pfixHoisted #$ plam $ \self superSet subSet ->
 --             pelimList (\superCSPair superCSPairs ->
 --               pelimList (\subCSPair subCSPairs ->
 --                 let superCS = pfromData $ pfstBuiltin # superCSPair
@@ -515,7 +515,7 @@ pcountNonAdaCS =
   phoistAcyclic $
     let go :: Term (s2 :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PInteger)
         go = plet (pdata padaSymbol) $ \padaSymbolD ->
-          pfix #$ plam $ \self n ->
+          pfixHoisted #$ plam $ \self n ->
             pelimList (\x xs -> pif (pfstBuiltin # x #== padaSymbolD) (self # n # xs) (self # (n + 1) # xs)) n
      in plam $ \val ->
           pmatch val $ \(PValue val') ->

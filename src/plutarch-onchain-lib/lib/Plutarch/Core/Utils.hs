@@ -52,10 +52,10 @@ import Plutarch.Prelude (PAdditiveGroup ((#-)), PAsData, PBool (PFalse),
                          PBuiltinList, PByteString, PEq (..), PInteger,
                          PIsListLike, PListLike (..), PMaybe (..), PPair (..),
                          S, Term, TermCont, pand', pany, pcon, pcond, pconstant,
-                         pdiv, pelem, perror, pfix, pfromData, phoistAcyclic,
-                         pif, plam, plet, pmatch, pnot, pquot, precList, prem,
-                         ptraceInfoError, tcont, type (:-->), (#$), (#&&), (#),
-                         (#>), (#>=))
+                         pdiv, pelem, perror, pfixHoisted, pfromData,
+                         phoistAcyclic, pif, plam, plet, pmatch, pnot, pquot,
+                         precList, prem, ptraceInfoError, tcont, type (:-->),
+                         (#$), (#&&), (#), (#>), (#>=))
 
 import GHC.Base (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
@@ -103,7 +103,7 @@ pfoldl2 ::
   Term s ((acc :--> a :--> b :--> acc) :--> acc :--> listA a :--> listB b :--> acc)
 pfoldl2 =
   phoistAcyclic $ plam $ \func ->
-    pfix #$ plam $ \self acc la lb ->
+    pfixHoisted #$ plam $ \self acc la lb ->
       pelimList
         ( \a as ->
             pelimList
@@ -116,7 +116,7 @@ pfoldl2 =
 
 pelemAtWithRest' :: PListLike list => PElemConstraint list a => Term s (PInteger :--> list a :--> PPair a (list a))
 pelemAtWithRest' = phoistAcyclic $
-  pfix #$ plam $ \self n xs ->
+  pfixHoisted #$ plam $ \self n xs ->
     pif
       (n #== 0)
       (pcon $ PPair (phead # xs) (ptail # xs))
@@ -127,7 +127,7 @@ pmapIdxs ::
   Term s (PBuiltinList (PAsData PInteger) :--> listB b :--> listB b)
 pmapIdxs =
   phoistAcyclic $
-    pfix #$ plam $ \self la lb ->
+    pfixHoisted #$ plam $ \self la lb ->
       pelimList
         ( \a as -> P.do
             PPair foundEle xs <- pmatch $ pelemAtWithRest' # pfromData a # lb
@@ -214,7 +214,7 @@ paysToPubKey = phoistAcyclic $
 ptryOutputToAddress :: (PIsListLike list (PAsData PTxOut)) => Term s (list (PAsData PTxOut) :--> PAddress :--> PTxOut)
 ptryOutputToAddress = phoistAcyclic $
   plam $ \outs target ->
-    ( pfix #$ plam $ \self xs ->
+    ( pfixHoisted #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
              pmatch (pfromData txo) $ \case
@@ -229,7 +229,7 @@ ptryOutputToAddress = phoistAcyclic $
 ptryOutputToScriptHash :: Term s (PBuiltinList (PAsData PTxOut) :--> PAsData PScriptHash :--> PTxOut)
 ptryOutputToScriptHash = phoistAcyclic $
   plam $ \outs target ->
-    ( pfix #$ plam $ \self xs ->
+    ( pfixHoisted #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
               pmatch (pfromData txo) $ \case
@@ -286,11 +286,11 @@ infix 4 #/=
 pmapAndConvertList :: (PIsListLike listA a, PIsListLike listB b) => Term s ((a :--> b) :--> listA a :--> listB b)
 pmapAndConvertList = phoistAcyclic $
   plam $ \f ->
-    pfix #$ plam $ \self xs -> pelimList (\y ys -> pcons # (f # y) # (self # ys)) pnil xs
+    pfixHoisted #$ plam $ \self xs -> pelimList (\y ys -> pcons # (f # y) # (self # ys)) pnil xs
 
 pintToByteString :: Term s (PInteger :--> PByteString)
 pintToByteString = phoistAcyclic $
-  pfix #$ plam $ \self n ->
+  pfixHoisted #$ plam $ \self n ->
     plet
       (pquot # abs n # 10)
       ( \q ->
