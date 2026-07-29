@@ -48,14 +48,15 @@ module Plutarch.Core.Utils(
 ) where
 
 import Data.Text qualified as T
+import Plutarch.Builtin.Data (PBuiltinPair (PBuiltinPair), pasByteStr)
 import Plutarch.Prelude (PAdditiveGroup ((#-)), PAsData, PBool (PFalse),
                          PBuiltinList, PByteString, PEq (..), PInteger,
                          PIsListLike, PListLike (..), PMaybe (..), PPair (..),
                          S, Term, TermCont, pand', pany, pcon, pcond, pconstant,
-                         pdiv, pelem, perror, pfixHoisted, pfromData,
-                         phoistAcyclic, pif, plam, plet, pmatch, pnot, pquot,
-                         precList, prem, ptraceInfoError, tcont, type (:-->),
-                         (#$), (#&&), (#), (#>), (#>=))
+                         pdiv, pelem, perror, pfixHoisted, pforgetData,
+                         pfromData, phoistAcyclic, pif, plam, plet, pmatch,
+                         pnot, pquot, precList, prem, ptraceInfoError, tcont,
+                         type (:-->), (#$), (#&&), (#), (#>), (#>=))
 
 import GHC.Base (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
@@ -255,6 +256,13 @@ ptryOwnInput = phoistAcyclic $
 ptxSignedByPkh ::
   Term s (PAsData PPubKeyHash :--> PBuiltinList (PAsData PPubKeyHash) :--> PBool)
 ptxSignedByPkh = pelem
+-- ^ Deliberately the equalsData-per-item pelem, NOT a payload-byte scan.
+-- Measured (decision.sig.*): the byte scan wins ~40 lovelace per ADDITIONAL
+-- item but pays ~10 machine steps of fixed setup, so it only breaks even at
+-- 2+ signatories with a late match. Signatory lists are realistically 1-3
+-- with the match first, where equalsData is fee-cheaper. Value scans
+-- (phasDataCS, ptryLookupValue) keep the byte form: their lists are longer
+-- and the target-byte extraction amortises across the whole scan.
 
 {- | @phasUTxO # oref # inputs@
   ensures that in @inputs@ there is an input having @TxOutRef@ @oref@ .

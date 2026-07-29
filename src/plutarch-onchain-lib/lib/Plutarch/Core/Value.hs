@@ -53,6 +53,7 @@ module Plutarch.Core.Value (
 import Generics.SOP qualified as SOP
 import GHC.Base (Type)
 import GHC.Generics (Generic)
+import Plutarch.Builtin.Data (PBuiltinPair (PBuiltinPair), pasByteStr)
 import Plutarch.Core.Internal.Builtins (pmapData, ppairDataBuiltinRaw)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.PByteString (pisPrefixOf)
@@ -67,9 +68,9 @@ import Plutarch.Prelude (DeriveAsDataRec, PAsData, PBool, PBuiltinList,
                          PBuiltinPair, PByteString, PEq (..), PInteger,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
                          POrd ((#<=)), S, Term, pall, pany, pcon, pconstant,
-                         pdata, pelem, perror, pfilter, pfixHoisted, pfoldl,
-                         pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
-                         pif, plam, plength, plet, pmap, pmatch,
+                         pdata, pelem, perror, pfilter, pfix, pfixHoisted,
+                         pfoldl, pforgetData, pfromData, pfstBuiltin,
+                         phoistAcyclic, pif, plam, plength, plet, pmap, pmatch,
                          ppairDataBuiltin, precList, psndBuiltin, pto,
                          type (:-->), (#$), (#))
 import Plutarch.Repr.Data (DeriveAsDataRec (..))
@@ -225,7 +226,64 @@ phasDataCS ::
     (PAsData PCurrencySymbol :--> PSortedValue :--> PBool))
 phasDataCS = phoistAcyclic $
   plam $ \symbol value ->
-    pany # plam (\tkPair -> (pfstBuiltin # tkPair) #== symbol) #$ pvalueCsPairs value
+    -- Currency symbols are B-shaped Data, so the SCAN compares payload BYTES
+    -- (pasByteStr + equalsByteString, ~180k CPU) instead of paying
+    -- equalsData's ~950k-CPU intercept per scanned entry. pasByteStr is
+    -- fail-closed: anything non-B in key position errors the script.
+    -- Direct recursion rather than pany: #|| pays ~10 machine steps of
+    -- por/delay/force plumbing PER ITEM (100 mem each), which is more than
+    -- the byte comparison itself.
+    --
+    -- Extracting the TARGET's bytes is a fixed cost, so which comparison is
+    -- cheaper depends on how many entries there are to amortise it over. The
+    -- strategy is therefore chosen by length, not applied uniformly:
+    --
+    --   one policy   -- equalsData, no setup at all. Measured on a single
+    --                   entry the byte path is ~830k CPU cheaper but ~660
+    --                   memory units dearer, and memory is what our scripts
+    --                   run out of first, so equalsData wins here. One-policy
+    --                   values are the common case: NFT checks and
+    --                   single-policy mints.
+    --   two or more  -- byte-scan every entry, paying the extraction once.
+    --
+    -- The Case that distinguishes the two cases also HANDS OVER the second
+    -- entry, so the two-or-more path reaches no entry twice and pays no
+    -- equalsData at all. Comparing the first entry by equalsData regardless
+    -- was measured too: it costs one wasted ~900k-CPU intercept per lookup on
+    -- long lists (+9.1M CPU on InsertDirectoryNode alone).
+    --
+    -- The loop takes the head and tail as arguments rather than closing over
+    -- them, which is free: applications of three or more arguments use the
+    -- Constr/Case encoding, and that spends no per-argument step.
+    let scan = pfix $ \self -> plam $ \symbolBytes csPair rest ->
+          pmatch csPair $ \(PBuiltinPair csD _) ->
+            pif
+              ((pasByteStr # pforgetData csD) #== symbolBytes)
+              (pconstant True)
+              (pelimList (\y ys -> self # symbolBytes # y # ys) (pconstant False) rest)
+     in pelimList
+          ( \csPair0 rest0 ->
+              pelimList
+                -- Two or more policies: byte-scan the whole list, paying the
+                -- target extraction once. The Case that tested for a second
+                -- entry hands that entry straight to the loop, so no entry is
+                -- reached twice and no equalsData is paid at all.
+                ( \csPair1 rest1 ->
+                    plet (pasByteStr # pforgetData symbol) $ \symbolBytes ->
+                      pmatch csPair0 $ \(PBuiltinPair cs0 _) ->
+                        pif
+                          ((pasByteStr # pforgetData cs0) #== symbolBytes)
+                          (pconstant True)
+                          (scan # symbolBytes # csPair1 # rest1)
+                )
+                -- Exactly one policy: equalsData, which needs no setup at all.
+                ( pmatch csPair0 $ \(PBuiltinPair cs0 _) ->
+                    cs0 #== symbol
+                )
+                rest0
+          )
+          (pconstant False)
+          (pvalueCsPairs value)
 
 -- | Checks if a Currency Symbol is held within a Value
 -- Arguments:
@@ -261,7 +319,7 @@ pcountOfUniqueTokens ::
   Term s (PSortedValue :--> PInteger)
 pcountOfUniqueTokens = phoistAcyclic $
   plam $ \val ->
-    let tokensLength = plam (\pair -> plength # ptokenPairs (pfromData $ psndBuiltin # pair))
+    let tokensLength = plam (\pair -> pmatch pair $ \(PBuiltinPair _ tokenMapD) -> plength # ptokenPairs (pfromData tokenMapD))
      in pfoldl # plam (\acc x -> acc + (tokensLength # x)) # 0 # pvalueCsPairs val
 
 -- | Subtracts one Value from another
@@ -417,18 +475,34 @@ ptrySingleTokenCS ::
     )
 ptrySingleTokenCS = phoistAcyclic $
   plam $ \policyId val ->
-    plet (pvalueCsPairs val) $ \val' ->
-      precList
-        ( \self x xs ->
+    -- First entry by equalsData, byte-scan only past it: see 'phasDataCS'.
+    let scan = pfix $ \self -> plam $ \targetBytes x xs ->
+          pmatch x $ \(PBuiltinPair csD tokenMapD) ->
             pif
-              (pfstBuiltin # x #== policyId)
-              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
-                  pheadSingleton # tokens
-              )
-              (self # xs)
-        )
-        (const perror)
-        # val'
+              ((pasByteStr # pforgetData csD) #== targetBytes)
+              (pheadSingleton # ptokenPairs (pfromData tokenMapD))
+              (pelimList (\y ys -> self # targetBytes # y # ys) perror xs)
+     in pelimList
+          ( \p0 rest0 ->
+              pelimList
+                -- Two or more policies: byte-scan from the first entry, paying
+                -- the target extraction once (see 'phasDataCS').
+                ( \p1 rest1 ->
+                    plet (pasByteStr # pforgetData policyId) $ \targetBytes ->
+                      pmatch p0 $ \(PBuiltinPair cs0 tokenMap0) ->
+                        pif
+                          ((pasByteStr # pforgetData cs0) #== targetBytes)
+                          (pheadSingleton # ptokenPairs (pfromData tokenMap0))
+                          (scan # targetBytes # p1 # rest1)
+                )
+                -- Exactly one policy: equalsData, no setup.
+                ( pmatch p0 $ \(PBuiltinPair cs0 tokenMap0) ->
+                    pif (cs0 #== policyId) (pheadSingleton # ptokenPairs (pfromData tokenMap0)) perror
+                )
+                rest0
+          )
+          perror
+          (pvalueCsPairs val)
 
 {- | Lookup the list of token-quantity pairs for a given currency symbol in a value.
      If the currency symbol is not found, the function will throw an error.
@@ -469,18 +543,36 @@ ptryLookupValue ::
     )
 ptryLookupValue = phoistAcyclic $
   plam $ \policyId val ->
-    plet (pvalueCsPairs val) $ \val' ->
-      precList
-        ( \self x xs ->
+    -- Byte-compare the B-shaped keys and destructure each pair with one Case
+    -- instead of FstPair (+ SndPair on the hit). First entry by equalsData,
+    -- byte-scan only past it: see 'phasDataCS' for why the setup is deferred.
+    let scan = pfix $ \self -> plam $ \targetBytes x xs ->
+          pmatch x $ \(PBuiltinPair csD tokenMapD) ->
             pif
-              (pfstBuiltin # x #== policyId)
-              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
-                  tokens
-              )
-              (self # xs)
-        )
-        (const perror)
-        # val'
+              ((pasByteStr # pforgetData csD) #== targetBytes)
+              (ptokenPairs (pfromData tokenMapD))
+              (pelimList (\y ys -> self # targetBytes # y # ys) perror xs)
+     in pelimList
+          ( \p0 rest0 ->
+              pelimList
+                -- Two or more policies: byte-scan from the first entry, paying
+                -- the target extraction once (see 'phasDataCS').
+                ( \p1 rest1 ->
+                    plet (pasByteStr # pforgetData policyId) $ \targetBytes ->
+                      pmatch p0 $ \(PBuiltinPair cs0 tokenMap0) ->
+                        pif
+                          ((pasByteStr # pforgetData cs0) #== targetBytes)
+                          (ptokenPairs (pfromData tokenMap0))
+                          (scan # targetBytes # p1 # rest1)
+                )
+                -- Exactly one policy: equalsData, no setup.
+                ( pmatch p0 $ \(PBuiltinPair cs0 tokenMap0) ->
+                    pif (cs0 #== policyId) (ptokenPairs (pfromData tokenMap0)) perror
+                )
+                rest0
+          )
+          perror
+          (pvalueCsPairs val)
 
 {- | Removes a currency symbol from a value
 -}
