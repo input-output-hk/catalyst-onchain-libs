@@ -18,6 +18,7 @@ module Plutarch.Core.Value (
   pvalueCsPairs,
   pledgerValueCsPairs,
   ptokenPairs,
+  punsortedMapPairs,
   pmkSortedValue,
   pmkLedgerValue,
 
@@ -129,6 +130,20 @@ ptokenPairs ::
   Term s (AssocMap.PSortedMap PTokenName PInteger) ->
   Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
 ptokenPairs m = pto (pto m)
+
+{- | The underlying pairs of an unsorted map, at the same depth as
+'ptokenPairs'.
+
+Several 'Plutarch.LedgerApi.V3.PTxInfo' fields -- withdrawals, redeemers,
+datums -- are 'AssocMap.PUnsortedMap', and reaching their pair list is the
+commonest place to be one 'pto' short: a single 'pto' yields a
+'AssocMap.PAssocMap', which is not a list at all.
+-}
+punsortedMapPairs ::
+  forall (k :: S -> Type) (v :: S -> Type) (s :: S).
+  Term s (AssocMap.PUnsortedMap k v) ->
+  Term s (PBuiltinList (PBuiltinPair (PAsData k) (PAsData v)))
+punsortedMapPairs m = pto (pto m)
 
 {- | Rebuild a sorted value from its currency-pair list.
 
