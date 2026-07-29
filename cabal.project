@@ -37,14 +37,21 @@ allow-newer:
 packages:
     src/plutarch-onchain-lib
 
--- Upstream Plutarch c3b47719 (1.14.0) with ONE line removed: a stray
--- {-# LANGUAGE TypeAbstractions #-} in Plutarch/Internal/Parse.hs. That
--- extension is GHC 9.8+, but upstream's own plutarch.cabal declares
--- `tested-with: GHC ==9.6.4` and nothing in the file uses type-abstraction
--- syntax -- every `@a` in it is an ordinary type APPLICATION. Consumed from a
--- local checkout while we confirm that; upstreaming the deletion is the fix.
-packages:
-    /home/gumbo/iohk/plutarch-1.14-patched
-    /home/gumbo/iohk/plutarch-1.14-patched/plutarch-ledger-api
-    /home/gumbo/iohk/plutarch-1.14-patched/plutarch-orphanage
-    /home/gumbo/iohk/plutarch-1.14-patched/plutarch-testlib
+-- Upstream Plutarch c3b47719 (1.14.0) plus two fixes that belong upstream:
+--   * Plutarch/Internal/Parse.hs carries a stray {-# LANGUAGE TypeAbstractions #-}
+--     (GHC 9.8+) though upstream declares tested-with GHC ==9.6.4, and every @a
+--     in that file is a type APPLICATION, not an abstraction.
+--     -> Plutonomicon/plutarch-plutus#1045
+--   * plutarch-orphanage defines `instance Arbitrary1 NonEmptyList`, which newer
+--     QuickCheck now provides itself, making it a duplicate-instance error.
+--     -> Plutonomicon/plutarch-plutus#1046
+-- Repoint at upstream and drop the fork once both land.
+source-repository-package
+    type: git
+    location: https://github.com/colll78/plutarch-plutus
+    tag: eac4bf1c36bced4e7174e51680122c1f88f6405f
+    subdir:
+        .
+        plutarch-ledger-api
+        plutarch-orphanage
+        plutarch-testlib
