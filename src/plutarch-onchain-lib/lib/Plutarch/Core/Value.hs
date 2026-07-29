@@ -13,6 +13,15 @@
 {-# LANGUAGE UndecidableInstances  #-}
 
 module Plutarch.Core.Value (
+  -- * Value representation
+  -- $representation
+  pvalueCsPairs,
+  pledgerValueCsPairs,
+  ptokenPairs,
+  punsortedMapPairs,
+  pmkSortedValue,
+  pmkLedgerValue,
+
   pfindCurrencySymbolsByTokenPrefix,
   pfindCurrencySymbolsByTokenName,
   phasDataCS,
@@ -42,25 +51,23 @@ module Plutarch.Core.Value (
 ) where
 
 import Generics.SOP qualified as SOP
+import GHC.Base (Type)
 import GHC.Generics (Generic)
 import Plutarch.Core.Internal.Builtins (pmapData, ppairDataBuiltinRaw)
 import Plutarch.Core.List (pheadSingleton)
 import Plutarch.Core.PByteString (pisPrefixOf)
 import Plutarch.Internal.PlutusType (PlutusType)
-import Plutarch.Internal.Term (PType, punsafeCoerce)
+import Plutarch.Internal.Term (punsafeCoerce)
 import Plutarch.LedgerApi.AssocMap qualified as AssocMap
-import Plutarch.LedgerApi.V3 (AmountGuarantees (NonZero, Positive),
-                              KeyGuarantees (Sorted), PCurrencySymbol,
-                              PMap (..), PTokenName, PValue (..))
-import Plutarch.LedgerApi.Value (padaSymbol, padaSymbolData, pnormalize,
-                                 pvalueOf)
+import Plutarch.LedgerApi.V3 (PCurrencySymbol, PTokenName)
+import Plutarch.LedgerApi.Value (PLedgerValue, PSortedValue, padaSymbol,
+                                 padaSymbolData, pvalueOf)
 import Plutarch.LedgerApi.Value qualified as Value
-import Plutarch.Prelude (ClosedTerm, DeriveAsDataRec, PAsData, PBool,
-                         PBuiltinList, PBuiltinPair, PByteString, PEq (..),
-                         PInteger,
+import Plutarch.Prelude (DeriveAsDataRec, PAsData, PBool, PBuiltinList,
+                         PBuiltinPair, PByteString, PEq (..), PInteger,
                          PListLike (pcons, pelimList, phead, pnil, ptail),
                          POrd ((#<=)), S, Term, pall, pany, pcon, pconstant,
-                         pdata, pelem, perror, pfilter, pfix, pfoldl,
+                         pdata, pelem, perror, pfilter, pfixHoisted, pfoldl,
                          pforgetData, pfromData, pfstBuiltin, phoistAcyclic,
                          pif, plam, plength, plet, pmap, pmatch,
                          ppairDataBuiltin, precList, psndBuiltin, pto,
@@ -68,31 +75,127 @@ import Plutarch.Prelude (ClosedTerm, DeriveAsDataRec, PAsData, PBool,
 import Plutarch.Repr.Data (DeriveAsDataRec (..))
 import PlutusLedgerApi.V1 (TokenName (..))
 
+{- $representation
+
+plutarch-ledger-api 3.7.0 stopped exporting the constructors of the value and
+map types, so their representation is reached with 'pto' rather than by pattern
+matching, and each type sits at a different depth:
+
+@
+PAssocMap k v                    pto x1  -- the builtin pair list
+PSortedMap / PUnsortedMap        pto x2
+PSortedValue / PRawValue         pto x3
+PLedgerValue / PMintValue        pto x4
+@
+
+The old @PValue@ reached its pair list in two, so every pre-3.7.0 @pto (pto v)@
+is now short by one or two. A miscount typechecks in some positions and not
+others -- @pto@ applied once to a 'AssocMap.PSortedMap' yields a
+'AssocMap.PAssocMap', which anything list-polymorphic will happily accept.
+These accessors exist so the depth is written down once, here, instead of at
+every use site.
+-}
+
+{- | The currency-symbol / token-map pairs underlying a sorted value.
+
+plutarch-ledger-api 3.7.0 replaced the phantom-tagged @PSortedValue@
+with three distinct types and stopped exporting the constructors of
+'PSortedValue' and 'PLedgerValue', so the representation is reached with 'pto'
+rather than by pattern matching. It is also one level deeper than before:
+'AssocMap.PSortedMap' wraps a 'AssocMap.PAssocMap', which wraps the builtin
+list, where the old @PMap@ wrapped the list directly.
+-}
+pvalueCsPairs ::
+  forall (s :: S).
+  Term s PSortedValue ->
+  Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))))
+pvalueCsPairs v = pto (pto (pto v))
+
+{- | The currency-symbol / token-map pairs underlying a ledger value.
+
+'PLedgerValue' is a newtype over 'PSortedValue', so its representation sits one
+'pto' deeper than 'pvalueCsPairs'. The same holds for
+@Plutarch.LedgerApi.V3.MintValue.PMintValue@; coerce a mint to 'PSortedValue'
+and use 'pvalueCsPairs' for that one.
+-}
+pledgerValueCsPairs ::
+  forall (s :: S).
+  Term s PLedgerValue ->
+  Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))))
+pledgerValueCsPairs = pvalueCsPairs . pto
+
+-- | The token-name / quantity pairs of a sorted token map.
+ptokenPairs ::
+  forall (s :: S).
+  Term s (AssocMap.PSortedMap PTokenName PInteger) ->
+  Term s (PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger)))
+ptokenPairs m = pto (pto m)
+
+{- | The underlying pairs of an unsorted map, at the same depth as
+'ptokenPairs'.
+
+Several 'Plutarch.LedgerApi.V3.PTxInfo' fields -- withdrawals, redeemers,
+datums -- are 'AssocMap.PUnsortedMap', and reaching their pair list is the
+commonest place to be one 'pto' short: a single 'pto' yields a
+'AssocMap.PAssocMap', which is not a list at all.
+-}
+punsortedMapPairs ::
+  forall (k :: S -> Type) (v :: S -> Type) (s :: S).
+  Term s (AssocMap.PUnsortedMap k v) ->
+  Term s (PBuiltinList (PBuiltinPair (PAsData k) (PAsData v)))
+punsortedMapPairs m = pto (pto m)
+
+{- | Rebuild a sorted value from its currency-pair list.
+
+'PSortedValue' does not export its constructor, so this coerces. That is only
+sound when the caller preserves the sortedness the type asserts. Every use in
+this module derives the list from an ALREADY sorted value by dropping or
+replacing the leading (ada) entry, neither of which can disturb the order of
+the remainder -- ada's currency symbol is the empty bytestring, so it sorts
+first and nothing can be reordered by removing it.
+-}
+pmkSortedValue ::
+  forall (s :: S).
+  Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger)))) ->
+  Term s PSortedValue
+pmkSortedValue = punsafeCoerce
+
+{- | Rebuild a ledger value from its currency-pair list.
+
+Carries the soundness obligation of 'pmkSortedValue', and additionally the
+non-negativity that 'PLedgerValue' asserts over 'PSortedValue': the caller must
+supply quantities that are already known positive, which in practice means
+deriving them from an existing ledger value rather than from arithmetic.
+-}
+pmkLedgerValue ::
+  forall (s :: S).
+  Term s (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger)))) ->
+  Term s PLedgerValue
+pmkLedgerValue = punsafeCoerce
+
 adaTokenName :: TokenName
 adaTokenName = TokenName ""
 
-padaTokenData :: ClosedTerm (PAsData PTokenName)
+padaTokenData :: forall s . Term s (PAsData PTokenName)
 padaTokenData = pconstant adaTokenName
 
 {- | Finds the associated Currency symbols that contain token names prefixed with the ByteString.
 -}
 pfindCurrencySymbolsByTokenPrefix ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
+  forall (s :: S).
+  (Term s
+    ( PSortedValue
         :--> PByteString
         :--> PBuiltinList (PAsData PCurrencySymbol)
-    )
+    ))
 pfindCurrencySymbolsByTokenPrefix = phoistAcyclic $
   plam $ \value prefix ->
     plet (pisPrefixOf # prefix) $ \prefixCheck ->
-      let mapVal = pto (pto value)
+      let mapVal = pvalueCsPairs value
           isPrefixed = pfilter # plam (\csPair ->
               pany # plam (\tkPair ->
                 prefixCheck # pto (pfromData $ pfstBuiltin # tkPair)
-                ) # pto (pfromData (psndBuiltin # csPair))
+                ) # ptokenPairs (pfromData (psndBuiltin # csPair))
             ) # mapVal
        in pmap # pfstBuiltin # isPrefixed
 
@@ -100,18 +203,16 @@ pfindCurrencySymbolsByTokenPrefix = phoistAcyclic $
   name.
 -}
 pfindCurrencySymbolsByTokenName ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
+  forall (s :: S).
+  ( Term s
+    ( PSortedValue
         :--> PTokenName
         :--> PBuiltinList (PAsData PCurrencySymbol)
-    )
+    ))
 pfindCurrencySymbolsByTokenName = phoistAcyclic $
   plam $ \value tn ->
-      let mapVal = pto (pto value)
-          hasTn = pfilter # plam (\csPair -> pany # plam (\tk -> tn #== pfromData (pfstBuiltin # tk)) # pto (pfromData (psndBuiltin # csPair))) # mapVal
+      let mapVal = pvalueCsPairs value
+          hasTn = pfilter # plam (\csPair -> pany # plam (\tk -> tn #== pfromData (pfstBuiltin # tk)) # ptokenPairs (pfromData (psndBuiltin # csPair))) # mapVal
        in pmap # pfstBuiltin # hasTn
 
 -- | Checks if a Currency Symbol is held within a Value
@@ -119,42 +220,36 @@ pfindCurrencySymbolsByTokenName = phoistAcyclic $
 --   the currency symbol (must be data-encoded) to check for.
 -- returns a boolean indicating whether the currency symbol is held within the value.
 phasDataCS ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    (PAsData PCurrencySymbol :--> PValue anyOrder anyAmount :--> PBool)
+  forall (s :: S).
+  (Term s
+    (PAsData PCurrencySymbol :--> PSortedValue :--> PBool))
 phasDataCS = phoistAcyclic $
   plam $ \symbol value ->
-    pany # plam (\tkPair -> (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
+    pany # plam (\tkPair -> (pfstBuiltin # tkPair) #== symbol) #$ pvalueCsPairs value
 
 -- | Checks if a Currency Symbol is held within a Value
 -- Arguments:
 --   the currency symbol (must not be data-encoded) to check for.
 -- returns a boolean indicating whether the currency symbol is held within the value.
 phasCS ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    (PValue anyOrder anyAmount :--> PCurrencySymbol :--> PBool)
+  forall (s :: S).
+  (Term s
+    (PSortedValue :--> PCurrencySymbol :--> PBool))
 phasCS = phoistAcyclic $
   plam $ \value symbol ->
-    pany # plam (\tkPair -> pfromData (pfstBuiltin # tkPair) #== symbol) #$ pto (pto value)
+    pany # plam (\tkPair -> pfromData (pfstBuiltin # tkPair) #== symbol) #$ pvalueCsPairs value
 
 -- | Checks that a Value contains all the given CurrencySymbols.
 pcontainsCurrencySymbols ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
+  forall (s :: S).
+  (Term s
+    ( PSortedValue
         :--> PBuiltinList (PAsData PCurrencySymbol)
         :--> PBool
-    )
+    ))
 pcontainsCurrencySymbols = phoistAcyclic $
   plam $ \inValue symbols ->
-    let value = pmap # pfstBuiltin #$ pto $ pto inValue
+    let value = pmap # pfstBuiltin #$ pvalueCsPairs inValue
         containsCS = plam $ \cs -> pelem # cs # value
      in pall # containsCS # symbols
 
@@ -162,26 +257,20 @@ pcontainsCurrencySymbols = phoistAcyclic $
 -- This is useful for preventing the dust token attack without needing to be overly
 -- restrictive on the content of a value (ie. enforce the value must only contain tokens that are known by the protocol)
 pcountOfUniqueTokens ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PInteger)
+  forall (s :: S).
+  Term s (PSortedValue :--> PInteger)
 pcountOfUniqueTokens = phoistAcyclic $
   plam $ \val ->
-    let tokensLength = plam (\pair -> pmatch (pfromData $ psndBuiltin # pair) $ \(PMap tokens) -> plength # tokens)
-     in pmatch val $ \(PValue val') ->
-          pmatch val' $ \(PMap csPairs) -> pfoldl # plam (\acc x -> acc + (tokensLength # x)) # 0 # csPairs
+    let tokensLength = plam (\pair -> plength # ptokenPairs (pfromData $ psndBuiltin # pair))
+     in pfoldl # plam (\acc x -> acc + (tokensLength # x)) # 0 # pvalueCsPairs val
 
 -- | Subtracts one Value from another
 psubtractValue ::
-  forall
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue 'Sorted amounts) ->
-  Term s (PValue 'Sorted amounts) ->
-  Term s (PValue 'Sorted 'NonZero)
-a `psubtractValue` b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMap.NonCommutative # plam (-) # a # b
+  forall (s :: S).
+  Term s (PSortedValue) ->
+  Term s (PSortedValue) ->
+  Term s (PSortedValue)
+a `psubtractValue` b = Value.pnormalizeNoAdaNonZeroTokens #$ Value.punionWith # plam (-) # a # b
 
 -- | Constructs a singleton `PValue` with the given currency symbol, token name, and amount.
 -- Argumenmts:
@@ -190,7 +279,7 @@ a `psubtractValue` b = pnormalize #$ Value.punionResolvingCollisionsWith AssocMa
 --   The amount of the token.
 --
 -- @return A singleton `PValue` containing the specified currency symbol, token name, and amount.
-pvalueSingleton :: Term s (PAsData PCurrencySymbol) -> Term s (PAsData PTokenName) -> Term s (PAsData PInteger) -> Term s (PAsData (PValue 'Sorted 'Positive))
+pvalueSingleton :: Term s (PAsData PCurrencySymbol) -> Term s (PAsData PTokenName) -> Term s (PAsData PInteger) -> Term s (PAsData (PLedgerValue))
 pvalueSingleton currencySymbol tokenName amount =
   let innerValue = pcons @PBuiltinList # (ppairDataBuiltin # tokenName # amount) # pnil
   in punsafeCoerce $ pmapData # (pcons @PBuiltinList # (ppairDataBuiltinRaw # pforgetData currencySymbol #$ pmapData # punsafeCoerce innerValue) # pnil)
@@ -201,23 +290,23 @@ pvalueSingleton currencySymbol tokenName amount =
 -- This function assumes that the first entry in the Value is Ada
 -- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
 -- So we are guaranteed that this is safe to use for any Value inside the Script Context
-ponlyLovelaceValueOf :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
+ponlyLovelaceValueOf :: Term s (PLedgerValue) -> Term s PInteger
 ponlyLovelaceValueOf val =
-  let csPairs = pto $ pto val
+  let csPairs = pvalueCsPairs (pto val)
       adaEntry = pheadSingleton # csPairs
-  in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
+  in pfromData (psndBuiltin #$ phead #$ ptokenPairs (pfromData (psndBuiltin # adaEntry)))
 
 -- | Returns the amount of Ada contained in a Value
 --
 -- The Cardano Ledger enforces that this invariant is maintained for all Values in the Script Context
 -- So we are guaranteed that this is safe to use for any Value inside the Script Context
-plovelaceValueOfFast :: Term s (PValue 'Sorted 'Positive) -> Term s PInteger
+plovelaceValueOfFast :: Term s (PLedgerValue) -> Term s PInteger
 plovelaceValueOfFast val =
-  let csPairs = pto $ pto val
+  let csPairs = pvalueCsPairs (pto val)
       adaEntry = phead # csPairs
-  in pfromData (psndBuiltin #$ phead #$ pto $ pfromData $ psndBuiltin # adaEntry)
+  in pfromData (psndBuiltin #$ phead #$ ptokenPairs (pfromData (psndBuiltin # adaEntry)))
 
-data PTriple (a :: PType) (b :: PType) (c :: PType) (s :: S)
+data PTriple (a :: S -> Type) (b :: S -> Type) (c :: S -> Type) (s :: S)
   = PTriple (Term s (PAsData a)) (Term s (PAsData b)) (Term s (PAsData c))
   deriving stock (Generic)
   deriving anyclass (SOP.Generic)
@@ -228,11 +317,8 @@ Throws when the token name is not found or more than one token name is involved
 Plutarch level function.
 -}
 ponlyAsset ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PTriple PCurrencySymbol PTokenName PInteger)
+  forall (s :: S).
+  Term s (PSortedValue :--> PTriple PCurrencySymbol PTokenName PInteger)
 ponlyAsset = phoistAcyclic $
   plam $ \val ->
     ponlyAssetC val $ \(cs, tk, a) -> pcon $ PTriple cs tk a
@@ -240,125 +326,109 @@ ponlyAsset = phoistAcyclic $
 {- | Same as `ponlyAsset` but returns the triple trough a haskell-level continuation.
 -}
 ponlyAssetC ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S)
-    r.
-  Term s (PValue keys amounts) -> ((Term s (PAsData PCurrencySymbol), Term s (PAsData PTokenName), Term s (PAsData PInteger)) -> Term s r) -> Term s r
+  forall (s :: S) r.
+  Term s (PSortedValue) -> ((Term s (PAsData PCurrencySymbol), Term s (PAsData PTokenName), Term s (PAsData PInteger)) -> Term s r) -> Term s r
 ponlyAssetC value k =
-    pmatch value $ \(PValue val') ->
-      plet (pheadSingleton # pto val') $ \valuePair ->
-        pmatch (pfromData (psndBuiltin # valuePair)) $ \(PMap tokens) ->
+    plet (pvalueCsPairs value) $ \val' ->
+      plet (pheadSingleton # val') $ \valuePair ->
+        plet (ptokenPairs (pfromData (psndBuiltin # valuePair))) $ \tokens ->
           plet (pheadSingleton # tokens) $ \tkPair ->
             k (pfstBuiltin # valuePair, pfstBuiltin # tkPair, psndBuiltin # tkPair)
 
 
 -- | Check that the provided value contains exactly one token of the given currency symbol.
 phasSingleTokenNoData ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
+  forall (s :: S).
   Term
     s
     ( PCurrencySymbol
-        :--> PValue keys amounts
+        :--> PSortedValue
         :--> PBool
     )
 phasSingleTokenNoData = phoistAcyclic $
   plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
+    plet (pvalueCsPairs val) $ \val' ->
       precList
         ( \self x xs ->
             pif
               (pfromData (pfstBuiltin # x) #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
                   pfromData (psndBuiltin # (pheadSingleton # tokens)) #== 1
               )
               (self # xs)
         )
         (const (pconstant False))
-        # pto val'
+        # val'
 
 -- | Extract the first token name of the given currency symbol.
 pfirstTokenNameWithCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PAsData PCurrencySymbol :--> PValue keys amounts :--> PTokenName)
+  forall (s :: S).
+  Term s (PAsData PCurrencySymbol :--> PSortedValue :--> PTokenName)
 pfirstTokenNameWithCS = phoistAcyclic $
   plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
+    plet (pvalueCsPairs val) $ \val' ->
       precList
         ( \self x xs ->
             pif
               (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
                   pfromData $ pfstBuiltin # (phead # tokens)
               )
               (self # xs)
         )
         (const perror)
-        # pto val'
+        # val'
 
 -- | Check that a value contains exactly one token of a given currency symbol
 -- and no other tokens with that currency symbol.
 -- Errors if other tokens with the same currency symbol are present.
 phasSingleToken ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
+  forall (s :: S).
   Term
     s
     ( PAsData PCurrencySymbol
-        :--> PValue keys amounts
+        :--> PSortedValue
         :--> PBool
     )
 phasSingleToken = phoistAcyclic $
   plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
+    plet (pvalueCsPairs val) $ \val' ->
       precList
         ( \self x xs ->
             pif
               (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
                   pfromData (psndBuiltin # (pheadSingleton # tokens)) #== 1
               )
               (self # xs)
         )
         (const (pconstant False))
-        # pto val'
+        # val'
 
 -- | Check that there is exactly one token name with the given currency symbol in the provided value
 -- return the token name and the quantity of the token.
 ptrySingleTokenCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
+  forall (s :: S).
   Term
     s
     ( PAsData PCurrencySymbol
-        :--> PValue keys amounts
+        :--> PSortedValue
         :--> PBuiltinPair (PAsData PTokenName) (PAsData PInteger)
     )
 ptrySingleTokenCS = phoistAcyclic $
   plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
+    plet (pvalueCsPairs val) $ \val' ->
       precList
         ( \self x xs ->
             pif
               (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
                   pheadSingleton # tokens
               )
               (self # xs)
         )
         (const perror)
-        # pto val'
+        # val'
 
 {- | Lookup the list of token-quantity pairs for a given currency symbol in a value.
      If the currency symbol is not found, the function will throw an error.
@@ -390,80 +460,75 @@ ptrySingleTokenCS = phoistAcyclic $
 
 -}
 ptryLookupValue ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
+  forall (s :: S).
   Term
     s
     ( PAsData PCurrencySymbol
-        :--> PValue keys amounts
+        :--> PSortedValue
         :--> PBuiltinList (PBuiltinPair (PAsData PTokenName) (PAsData PInteger))
     )
 ptryLookupValue = phoistAcyclic $
   plam $ \policyId val ->
-    pmatch val $ \(PValue val') ->
+    plet (pvalueCsPairs val) $ \val' ->
       precList
         ( \self x xs ->
             pif
               (pfstBuiltin # x #== policyId)
-              ( pmatch (pfromData (psndBuiltin # x)) $ \(PMap tokens) ->
+              ( plet (ptokenPairs (pfromData (psndBuiltin # x))) $ \tokens ->
                   tokens
               )
               (self # xs)
         )
         (const perror)
-        # pto val'
+        # val'
 
 {- | Removes a currency symbol from a value
 -}
 pfilterCSFromValue ::
-  forall
-    (anyOrder :: KeyGuarantees)
-    (anyAmount :: AmountGuarantees).
-  ClosedTerm
-    ( PValue anyOrder anyAmount
+  forall (s :: S).
+  (Term s
+    ( PSortedValue
         :--> PAsData PCurrencySymbol
-        :--> PValue anyOrder anyAmount
-    )
+        :--> PSortedValue
+    ))
 pfilterCSFromValue = phoistAcyclic $
   plam $ \value policyId ->
-      let mapVal = pto (pto value)
-          go = pfix #$ plam $ \self ys ->
+      let mapVal = pvalueCsPairs value
+          go = pfixHoisted #$ plam $ \self ys ->
                 pelimList (\x xs -> pif (pfstBuiltin # x #== policyId) xs (pcons # x # (self # xs))) pnil ys
-       in pcon (PValue $ pcon $ PMap $ go # mapVal)
+       in pmkSortedValue (go # mapVal)
 
 -- | Check if a value contains another value
 -- This function checks if the first value contains all the tokens of the second value
 -- and the quantities of the tokens in the first value are greater than or equal to the quantities of the tokens in the second value.
 pvalueContains ::
-  ClosedTerm
-    ( PValue 'Sorted 'Positive
-        :--> PValue 'Sorted 'Positive
+  (Term s
+    ( PLedgerValue
+        :--> PLedgerValue
         :--> PBool
-    )
+    ))
 pvalueContains = phoistAcyclic $
   plam $ \superset subset ->
     let forEachTN cs = plam $ \tnPair ->
           let tn = pfromData $ pfstBuiltin # tnPair
               amount = pfromData $ psndBuiltin # tnPair
-           in amount #<= pvalueOf # superset # cs # tn
+           in amount #<= pvalueOf # pto superset # cs # tn
         forEachCS = plam $ \csPair ->
           let cs = pfromData $ pfstBuiltin # csPair
-              tnMap = pto $ pfromData $ psndBuiltin # csPair
+              tnMap = ptokenPairs (pfromData (psndBuiltin # csPair))
            in pall # forEachTN cs # tnMap
-     in pall # forEachCS #$ pto $ pto subset
+     in pall # forEachCS #$ pvalueCsPairs (pto subset)
 
 -- TODO: Complete this function.
 -- pvalueContainsFast ::
 --   ClosedTerm
---     ( PValue 'Sorted 'Positive
---         :--> PValue 'Sorted 'Positive
+--     ( PLedgerValue
+--         :--> PLedgerValue
 --         :--> PBool
 --     )
 -- pvalueContainsFast = phoistAcyclic $ plam $ \superValue subValue ->
---   let go :: Term (s2 :: S) (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PBool)
---       go = pfix #$ plam $ \self superSet subSet ->
+--   let go :: Term (s2 :: S) (PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))) :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))) :--> PBool)
+--       go = pfixHoisted #$ plam $ \self superSet subSet ->
 --             pelimList (\superCSPair superCSPairs ->
 --               pelimList (\subCSPair subCSPairs ->
 --                 let superCS = pfromData $ pfstBuiltin # superCSPair
@@ -494,70 +559,58 @@ pvalueContains = phoistAcyclic $
 
 -- | Count the number of currency symbols in a value.
 pcountCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PInteger)
+  forall (s :: S).
+  Term s (PSortedValue :--> PInteger)
 pcountCS = phoistAcyclic $
   plam $ \val ->
-    pmatch val $ \(PValue val') ->
-      pmatch val' $ \(PMap csPairs) ->
-        plength # csPairs
+    plength # pvalueCsPairs val
 
 -- | Count the number of non-Ada currency symbols in a value.
 pcountNonAdaCS ::
-  forall
-    (keys :: KeyGuarantees)
-    (amounts :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue keys amounts :--> PInteger)
+  forall (s :: S).
+  Term s (PSortedValue :--> PInteger)
 pcountNonAdaCS =
   phoistAcyclic $
-    let go :: Term (s2 :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (PMap keys PTokenName PInteger))) :--> PInteger)
+    let go :: Term (s2 :: S) (PInteger :--> PBuiltinList (PBuiltinPair (PAsData PCurrencySymbol) (PAsData (AssocMap.PSortedMap PTokenName PInteger))) :--> PInteger)
         go = plet (pdata padaSymbol) $ \padaSymbolD ->
-          pfix #$ plam $ \self n ->
+          pfixHoisted #$ plam $ \self n ->
             pelimList (\x xs -> pif (pfstBuiltin # x #== padaSymbolD) (self # n # xs) (self # (n + 1) # xs)) n
      in plam $ \val ->
-          pmatch val $ \(PValue val') ->
-            pmatch val' $ \(PMap csPairs) ->
-              go # 0 # csPairs
+          go # 0 # pvalueCsPairs val
 
 -- | Strip Ada from a ledger value
 -- This assumes that Ada is the first entry in the Value. If Ada is not the first entry, this function assumes the value does not
 -- contain Ada and thus will just return the value as provided.
 pstripAdaSafe ::
-  forall
-    (v :: AmountGuarantees)
-    (s :: S).
-  Term s (PValue 'Sorted v :--> PValue 'Sorted v)
+  forall (s :: S).
+  Term s (PSortedValue :--> PSortedValue)
 pstripAdaSafe = phoistAcyclic $
   plam $ \value ->
-    let valMap = pto (pto value)
+    let valMap = pvalueCsPairs value
         firstEntryCS = pfstBuiltin # (phead # valMap)
         nonAdaValueMapInner = ptail # valMap
-     in pif (firstEntryCS #== padaSymbolData) (pcon (PValue $ pcon $ PMap nonAdaValueMapInner)) value
+     in pif (firstEntryCS #== padaSymbolData) (pmkSortedValue nonAdaValueMapInner) value
 
 -- | Strip Ada from a ledger value
 -- Importantly this function assumes that the Value is provided by the ledger (i.e. via the ScriptContext)
 -- and thus the invariant that Ada is the first entry in the Value is maintained.
 pstripAda ::
-  forall (v :: AmountGuarantees) (s :: S).
-  Term s (PValue 'Sorted v :--> PValue 'Sorted v)
+  forall (s :: S).
+  Term s (PSortedValue :--> PSortedValue)
 pstripAda = phoistAcyclic $
   plam $ \value ->
-    let nonAdaValueMapInner = ptail # pto (pto value)
-    in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)
+    let nonAdaValueMapInner = ptail # pvalueCsPairs value
+    in pmkSortedValue nonAdaValueMapInner
 
 -- | Update ada quantity in a value
 -- Importantly this function assumes that the Value is provided by the ledger (i.e. via the ScriptContext)
 -- and thus the invariant that Ada is the first entry in the Value is maintained.
 pupdateAdaInValue ::
-  forall (v :: AmountGuarantees) (s :: S).
-  Term s (PInteger :--> PValue 'Sorted v :--> PValue 'Sorted v)
+  forall (s :: S).
+  Term s (PInteger :--> PSortedValue :--> PSortedValue)
 pupdateAdaInValue = phoistAcyclic $
   plam $ \amnt value ->
     let innerAdaMap = pcons @PBuiltinList # (ppairDataBuiltin # padaTokenData # pdata amnt) # pnil
         adaEntry = punsafeCoerce $ ppairDataBuiltinRaw # pforgetData padaSymbolData #$ pmapData # punsafeCoerce innerAdaMap
-        nonAdaValueMapInner = punsafeCoerce $ pcons # adaEntry # (ptail # pto (pto value))
-    in pcon (PValue $ pcon $ PMap nonAdaValueMapInner)
+        nonAdaValueMapInner = punsafeCoerce $ pcons # adaEntry # (ptail # pvalueCsPairs value)
+    in pmkSortedValue nonAdaValueMapInner

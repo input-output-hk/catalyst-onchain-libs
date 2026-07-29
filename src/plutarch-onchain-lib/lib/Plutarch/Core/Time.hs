@@ -56,7 +56,7 @@ ptoFiniteRange = phoistAcyclic $ plam $ \timeRange -> P.do
 pvalidityRangeStart :: Term s (PPosixTimeRange :--> PAsData PInteger)
 pvalidityRangeStart = phoistAcyclic $ plam $ \timeRange -> P.do
   interval <- pmatch timeRange
-  let startTime = pinteral'from interval
+  let startTime = pinterval'from interval
   --PInterval ((pfield @"from" #) -> startTime) <- pmatch timeRange
   PLowerBound lb _ <- pmatch startTime
   PFinite posixTime <- pmatch lb
@@ -67,7 +67,7 @@ pvalidityRangeStart = phoistAcyclic $ plam $ \timeRange -> P.do
 pvalidityRangeEnd :: Term s (PPosixTimeRange :--> PAsData PInteger)
 pvalidityRangeEnd = phoistAcyclic $ plam $ \timeRange -> P.do
   interval <- pmatch timeRange
-  let to_ = pinteral'to interval
+  let to_ = pinterval'to interval
   PUpperBound ub _ <- pmatch to_
   PFinite posixTime <- pmatch ub
   punsafeCoerce $ pto posixTime

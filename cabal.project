@@ -15,21 +15,43 @@ repository cardano-haskell-packages
     d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
 
 index-state:
-  , hackage.haskell.org 2025-04-08T16:51:26Z
-  , cardano-haskell-packages 2025-04-08T16:51:26Z
+  , hackage.haskell.org 2026-05-31T00:00:00Z
+  , cardano-haskell-packages 2026-05-31T00:00:00Z
 
 with-compiler: ghc-9.6.6
+
+constraints:
+  -- Pinned to what upstream Plutarch 1.14.0 requires (it pins plutus-core
+  -- ==1.65.0.0 exactly, so this is not a floor but the exact version).
+  , plutus-core == 1.65.0.0
+  , plutus-ledger-api == 1.65.0.0
+  , plutus-tx == 1.65.0.0
+
+allow-newer:
+  -- These constraints are taken from Plutarch.
+  -- https://github.com/phadej/vec/issues/121
+  ral:QuickCheck,
+  fin:QuickCheck,
+  bin:QuickCheck,
 
 packages:
     src/plutarch-onchain-lib
 
+-- Upstream Plutarch c3b47719 (1.14.0) plus two fixes that belong upstream:
+--   * Plutarch/Internal/Parse.hs carries a stray {-# LANGUAGE TypeAbstractions #-}
+--     (GHC 9.8+) though upstream declares tested-with GHC ==9.6.4, and every @a
+--     in that file is a type APPLICATION, not an abstraction.
+--     -> Plutonomicon/plutarch-plutus#1045
+--   * plutarch-orphanage defines `instance Arbitrary1 NonEmptyList`, which newer
+--     QuickCheck now provides itself, making it a duplicate-instance error.
+--     -> Plutonomicon/plutarch-plutus#1046
+-- Repoint at upstream and drop the fork once both land.
 source-repository-package
     type: git
-    location: https://github.com/Plutonomicon/plutarch-plutus
-    tag: f84a46287b06f36abf8d2d63bec7ff75d32f3e91
-    --sha256: sha256-gKBk9D6DHSEudq7P9+07yXWcgM/QX7NFp0tJXBodopM=
+    location: https://github.com/colll78/plutarch-plutus
+    tag: eac4bf1c36bced4e7174e51680122c1f88f6405f
     subdir:
-      .
-      plutarch-ledger-api
-      plutarch-orphanage
-      plutarch-testlib
+        .
+        plutarch-ledger-api
+        plutarch-orphanage
+        plutarch-testlib

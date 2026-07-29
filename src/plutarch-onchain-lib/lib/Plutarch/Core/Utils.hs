@@ -48,34 +48,33 @@ module Plutarch.Core.Utils(
 ) where
 
 import Data.Text qualified as T
-import Plutarch.Prelude (ClosedTerm, PAdditiveGroup ((#-)), PAsData,
-                         PBool (PFalse), PBuiltinList, PByteString, PEq (..),
-                         PInteger, PIsListLike, PListLike (..), PMaybe (..),
-                         PPair (..), S, Term, TermCont, pand', pany, pcon,
-                         pcond, pconstant, pdiv, pelem, perror, pfix, pfromData,
+import Plutarch.Prelude (PAdditiveGroup ((#-)), PAsData, PBool (PFalse),
+                         PBuiltinList, PByteString, PEq (..), PInteger,
+                         PIsListLike, PListLike (..), PMaybe (..), PPair (..),
+                         S, Term, TermCont, pand', pany, pcon, pcond, pconstant,
+                         pdiv, pelem, perror, pfixHoisted, pfromData,
                          phoistAcyclic, pif, plam, plet, pmatch, pnot, pquot,
                          precList, prem, ptraceInfoError, tcont, type (:-->),
                          (#$), (#&&), (#), (#>), (#>=))
 
+import GHC.Base (Type)
 import Plutarch.Core.Context (paddressCredential, ptxOutAddress,
                               ptxOutCredential)
 import Plutarch.Core.Value (pvalueContains)
-import Plutarch.Internal.Term (PType)
-import Plutarch.LedgerApi.V3 (AmountGuarantees (Positive),
-                              KeyGuarantees (Sorted),
-                              PAddress (paddress'credential),
+import Plutarch.LedgerApi.V3 (PAddress (paddress'credential),
                               PCredential (PPubKeyCredential, PScriptCredential),
                               PMaybeData, POutputDatum, PPubKeyHash,
                               PScriptHash, PTxInInfo (..),
                               PTxOut (PTxOut, ptxOut'address, ptxOut'value),
-                              PTxOutRef, PValue)
+                              PTxOutRef)
+import Plutarch.LedgerApi.Value (PLedgerValue)
 import Plutarch.Monadic qualified as P
 import Prelude
 
 data PTxOutH (s :: S) =
   PTxOutH
     { ptxOutAddressH         :: Term s PAddress
-    , ptxOutValueH           :: Term s (PValue 'Sorted 'Positive)
+    , ptxOutValueH           :: Term s (PLedgerValue)
     , ptxOutDatumH           :: Term s POutputDatum
     , ptxOutReferenceScriptH :: Term s (PMaybeData PScriptHash)
     }
@@ -87,7 +86,7 @@ ppair a b = pcon (PPair a b)
    Short trace is a sequence of first letters of long trace words.
 -}
 passert ::
-  forall (s :: S) (a :: PType).
+  forall (s :: S) (a :: S -> Type).
   T.Text -> -- long trace
   Term s PBool ->
   Term s a ->
@@ -95,7 +94,7 @@ passert ::
 passert longErrorMsg b inp = pif b inp $ ptraceInfoError (pconstant longErrorMsg)
 
 -- | If the input is True then returns PJust otherwise PNothing
-pcheck :: forall (s :: S) (a :: PType). Term s PBool -> Term s a -> Term s (PMaybe a)
+pcheck :: forall (s :: S) (a :: S -> Type). Term s PBool -> Term s a -> Term s (PMaybe a)
 pcheck b inp = pif b (pcon $ PJust inp) (pcon PNothing)
 
 pfoldl2 ::
@@ -103,7 +102,7 @@ pfoldl2 ::
   Term s ((acc :--> a :--> b :--> acc) :--> acc :--> listA a :--> listB b :--> acc)
 pfoldl2 =
   phoistAcyclic $ plam $ \func ->
-    pfix #$ plam $ \self acc la lb ->
+    pfixHoisted #$ plam $ \self acc la lb ->
       pelimList
         ( \a as ->
             pelimList
@@ -116,7 +115,7 @@ pfoldl2 =
 
 pelemAtWithRest' :: PListLike list => PElemConstraint list a => Term s (PInteger :--> list a :--> PPair a (list a))
 pelemAtWithRest' = phoistAcyclic $
-  pfix #$ plam $ \self n xs ->
+  pfixHoisted #$ plam $ \self n xs ->
     pif
       (n #== 0)
       (pcon $ PPair (phead # xs) (ptail # xs))
@@ -127,7 +126,7 @@ pmapIdxs ::
   Term s (PBuiltinList (PAsData PInteger) :--> listB b :--> listB b)
 pmapIdxs =
   phoistAcyclic $
-    pfix #$ plam $ \self la lb ->
+    pfixHoisted #$ plam $ \self la lb ->
       pelimList
         ( \a as -> P.do
             PPair foundEle xs <- pmatch $ pelemAtWithRest' # pfromData a # lb
@@ -150,7 +149,7 @@ pmapFilter =
         )
         (const pnil)
 
-tcexpectJust :: forall r (a :: PType) (s :: S). Term s r -> Term s (PMaybe a) -> TermCont @r s (Term s a)
+tcexpectJust :: forall r (a :: S -> Type) (s :: S). Term s r -> Term s (PMaybe a) -> TermCont @r s (Term s a)
 tcexpectJust escape ma = tcont $ \f -> pmatch ma $ \case
   PJust v -> f v
   PNothing -> escape
@@ -159,14 +158,14 @@ paysToAddress :: Term s (PAddress :--> PTxOut :--> PBool)
 paysToAddress = phoistAcyclic $ plam $ \adr txOut -> adr #== ptxOutAddress txOut
 
 paysValueToAddress ::
-  Term s (PValue 'Sorted 'Positive :--> PAddress :--> PTxOut :--> PBool)
+  Term s (PLedgerValue :--> PAddress :--> PTxOut :--> PBool)
 paysValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
     pmatch txOut $ \(PTxOut {ptxOut'address, ptxOut'value}) ->
       ptxOut'address #== adr #&& pvalueContains # val # pfromData ptxOut'value
 
 paysAtleastValueToAddress ::
-  Term s (PValue 'Sorted 'Positive :--> PAddress :--> PTxOut :--> PBool)
+  Term s (PLedgerValue :--> PAddress :--> PTxOut :--> PBool)
 paysAtleastValueToAddress = phoistAcyclic $
   plam $ \val adr txOut ->
     pmatch txOut $ \(PTxOut {ptxOut'address, ptxOut'value}) ->
@@ -187,11 +186,11 @@ pgetPubKeyHash addr =
         PPubKeyCredential pkh' -> pkh'
 
 pmapMaybe ::
-  forall (list :: PType -> PType) (a :: PType) (b :: PType).
+  forall (list :: (S -> Type) -> (S -> Type)) (a :: S -> Type) (b :: S -> Type).
   PListLike list =>
   PElemConstraint list a =>
   PElemConstraint list b =>
-  ClosedTerm ((a :--> PMaybe b) :--> list a :--> list b)
+  (forall s . Term s ((a :--> PMaybe b) :--> list a :--> list b))
 pmapMaybe =
   phoistAcyclic $
     plam $ \func ->
@@ -214,7 +213,7 @@ paysToPubKey = phoistAcyclic $
 ptryOutputToAddress :: (PIsListLike list (PAsData PTxOut)) => Term s (list (PAsData PTxOut) :--> PAddress :--> PTxOut)
 ptryOutputToAddress = phoistAcyclic $
   plam $ \outs target ->
-    ( pfix #$ plam $ \self xs ->
+    ( pfixHoisted #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
              pmatch (pfromData txo) $ \case
@@ -229,7 +228,7 @@ ptryOutputToAddress = phoistAcyclic $
 ptryOutputToScriptHash :: Term s (PBuiltinList (PAsData PTxOut) :--> PAsData PScriptHash :--> PTxOut)
 ptryOutputToScriptHash = phoistAcyclic $
   plam $ \outs target ->
-    ( pfix #$ plam $ \self xs ->
+    ( pfixHoisted #$ plam $ \self xs ->
         pelimList
           ( \txo txos ->
               pmatch (pfromData txo) $ \case
@@ -261,11 +260,11 @@ ptxSignedByPkh = pelem
   ensures that in @inputs@ there is an input having @TxOutRef@ @oref@ .
 -}
 phasUTxO ::
-  ClosedTerm
+  (forall s. Term s
     ( PTxOutRef
         :--> PBuiltinList (PAsData PTxInInfo)
         :--> PBool
-    )
+    ))
 phasUTxO = phoistAcyclic $
   plam $ \oref inInputs ->
     pany @PBuiltinList # plam (\input ->
@@ -286,11 +285,11 @@ infix 4 #/=
 pmapAndConvertList :: (PIsListLike listA a, PIsListLike listB b) => Term s ((a :--> b) :--> listA a :--> listB b)
 pmapAndConvertList = phoistAcyclic $
   plam $ \f ->
-    pfix #$ plam $ \self xs -> pelimList (\y ys -> pcons # (f # y) # (self # ys)) pnil xs
+    pfixHoisted #$ plam $ \self xs -> pelimList (\y ys -> pcons # (f # y) # (self # ys)) pnil xs
 
 pintToByteString :: Term s (PInteger :--> PByteString)
 pintToByteString = phoistAcyclic $
-  pfix #$ plam $ \self n ->
+  pfixHoisted #$ plam $ \self n ->
     plet
       (pquot # abs n # 10)
       ( \q ->

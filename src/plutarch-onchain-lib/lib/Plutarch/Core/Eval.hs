@@ -36,9 +36,8 @@ import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified
 import Data.Word (Word8)
 import Plutarch.Evaluate (applyArguments, evalScript, evalScriptHuge)
-import Plutarch.Internal.Term (Config (..), LogLevel (..), TracingMode (..),
-                               compile)
-import Plutarch.Prelude (ClosedTerm)
+import Plutarch.Internal.Term (Config (..), LogLevel (..), S, Term,
+                               TracingMode (..), compile)
 import Plutarch.Pretty (prettyScript)
 import Plutarch.Script (Script, deserialiseScript, serialiseScript)
 import PlutusLedgerApi.V2 (BuiltinByteString, Data, ExBudget)
@@ -49,6 +48,8 @@ import Test.Tasty.HUnit (HasCallStack)
 
 encodeSerialiseCBOR :: Script -> Text
 encodeSerialiseCBOR = Text.decodeUtf8 . Base16.encode . CBOR.serialize' . serialiseScript
+
+type ClosedTerm a = (forall (s' :: S). Term s' a)
 
 evalT :: Config -> ClosedTerm a -> Either Text (Script, ExBudget, [Text])
 evalT cfg x = evalWithArgsT cfg x []

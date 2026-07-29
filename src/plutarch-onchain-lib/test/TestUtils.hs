@@ -8,7 +8,7 @@ import Test.Tasty.HUnit
 {- | Assert that term compiled and evaluated without errors
 
 -}
-testEval :: TestName -> ClosedTerm a -> TestTree
+testEval :: TestName -> (forall s . Term s a) -> TestTree
 testEval name term = testCase name $ do
   case evalTermResult (Tracing LogDebug DoTracingAndBinds) term of
     FailedToCompile err -> assertFailure $ "Failed to compile: " <> Text.unpack err

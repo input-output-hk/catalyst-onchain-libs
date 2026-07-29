@@ -30,18 +30,21 @@ module Plutarch.Core.List (
 ) where
 
 import Data.List (foldl')
+import GHC.Base (Type)
 import Plutarch.Core.Internal.Builtins (pcountSetBits', pindexBS', pwriteBits')
-import Plutarch.Internal.Term (PType)
 import Plutarch.Monadic qualified as P
-import Plutarch.Prelude (ClosedTerm, PAsData, PBool (..), PBuiltinList (..),
-                         PByteString, PData, PEq ((#==)), PInteger, PIsListLike,
+import Plutarch.Prelude (PAsData, PBool (..), PBuiltinList (..), PByteString,
+                         PData, PEq ((#==)), PInteger, PIsListLike,
                          PListLike (PElemConstraint, pcons, pelimList, phead, pnil, ptail),
                          PMultiplicativeSemigroup ((#*)), POrd ((#<), (#<=)),
                          PPair (..), S, Term, pcon, pconcat, pcond, pconsBS,
-                         pconstant, perror, pfix, pforgetData, phexByteStr,
-                         phoistAcyclic, pif, plam, plet, pmatch, pmod, precList,
-                         ptraceInfoError, type (:-->), (#$), (#), (#>))
+                         pconstant, perror, pfixHoisted, pforgetData,
+                         phexByteStr, phoistAcyclic, pif, plam, plet, pmatch,
+                         pmod, precList, ptraceInfoError, type (:-->), (#$),
+                         (#), (#>))
 import Prelude
+
+type ClosedTerm a = (forall (s' :: S). Term s' a)
 
 -- | Metaprogramming utility that translates to n applications of ptail
 pnTails :: PIsListLike list a => Integer -> Term s (list a) -> Term s (list a)
@@ -79,18 +82,18 @@ pisSingleton = pelimList
 -- Errors if no element satisfies the predicate.
 pmustFind :: PIsListLike l a => Term s ((a :--> PBool) :--> l a :--> a)
 pmustFind =
-  phoistAcyclic $ plam $ \f -> pfix #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) y (self # ys)) perror xs
+  phoistAcyclic $ plam $ \f -> pfixHoisted #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) y (self # ys)) perror xs
 
 -- | Check if a list contains an element that satisfies a predicate.
 pcanFind :: PIsListLike l a => Term s ((a :--> PBool) :--> l a :--> PBool)
 pcanFind =
-  phoistAcyclic $ plam $ \f -> pfix #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) (pconstant True) (self # ys)) (pconstant False) xs
+  phoistAcyclic $ plam $ \f -> pfixHoisted #$ plam $ \self xs -> pelimList (\y ys -> pif (f # y) (pconstant True) (self # ys)) (pconstant False) xs
 
 -- | Find the element at the given index in a list.
 -- This function uses naive recursion and is not efficient for large lists.
 pelemAt' :: PIsListLike l a => Term s (PInteger :--> l a :--> a)
 pelemAt' = phoistAcyclic $
-  pfix #$ plam $ \self n xs ->
+  pfixHoisted #$ plam $ \self n xs ->
     pif
       (n #== 0)
       (phead # xs)
@@ -102,7 +105,7 @@ pelemAt' = phoistAcyclic $
 -- The arguments are flipped such that the list comes first to allow for partial application.
 pelemAtFlipped' :: PIsListLike l a => Term s (l a :--> PInteger :--> a)
 pelemAtFlipped' = phoistAcyclic $
-  pfix #$ plam $ \self xs n ->
+  pfixHoisted #$ plam $ \self xs n ->
     pif
       (n #== 0)
       (phead # xs)
@@ -113,7 +116,7 @@ pelemAtFlipped' = phoistAcyclic $
 -- The arguments are flipped such that the list comes first to allow for partial application.
 pelemAtFast :: (PIsListLike list a) => Term s (list a :--> PInteger :--> a)
 pelemAtFast = phoistAcyclic $
-  pfix #$ plam $ \self xs n ->
+  pfixHoisted #$ plam $ \self xs n ->
     pif
       (10 #< n)
       ( self
@@ -129,12 +132,12 @@ pelemAtFast = phoistAcyclic $
 -- | Drop the first n elements of a list.
 -- Uses naive recursion and is inefficient for large lists.
 -- However, the script size is smaller than the fast variant.
-pdropR :: forall (list :: PType -> PType) (a :: PType) (s :: S).
+pdropR :: forall (list :: (S -> Type) -> (S -> Type)) (a :: S -> Type) (s :: S).
           PIsListLike list a =>
           Term s (PInteger :--> list a :--> list a)
 pdropR = phoistAcyclic $
   let go :: Term (s2 :: S) (PInteger :--> list a :--> list a)
-      go = pfix #$ plam $ \self n ys ->
+      go = pfixHoisted #$ plam $ \self n ys ->
             pif (n #== 0) ys (self # (n - 1) # (ptail # ys))
    in go
 
@@ -143,7 +146,7 @@ pdropR = phoistAcyclic $
 -- The script size is larger than the naive variant, but ex-unit cost is significantly lower (it is more efficient).
 pdropFast :: PIsListLike PBuiltinList a => Term s (PInteger :--> PBuiltinList a :--> PBuiltinList a)
 pdropFast = phoistAcyclic $
-  let go = pfix #$ plam $ \self n ys ->
+  let go = pfixHoisted #$ plam $ \self n ys ->
             pcond
               [ (30 #<= n, self # (n - 30) # (ptails30 # ys))
               , (20 #<= n, self # (n - 20) # (ptails20 # ys))
@@ -202,7 +205,7 @@ pow2_trick = plam $ \exponent' ->
 -- | Compute 2^exponent
 -- less efficient than pow2_trick, but has a smaller script size.
 ppow2 :: Term s (PInteger :--> PInteger)
-ppow2 = phoistAcyclic $ pfix #$ plam $ \self e ->
+ppow2 = phoistAcyclic $ pfixHoisted #$ plam $ \self e ->
   pif (e #< 8)
     (pif (e #< 0)
       0
@@ -226,7 +229,7 @@ phasNSetBits n bs =
 _pIsUnique :: Term s (PBuiltinList PInteger :--> PBool)
 _pIsUnique = phoistAcyclic $ plam $ \list ->
   let go :: Term (s2 :: S) (PInteger :--> PBuiltinList PInteger :--> PBool)
-      go = pfix #$ plam $ \self flag_bit xs ->
+      go = pfixHoisted #$ plam $ \self flag_bit xs ->
             pelimList
               (\y ys ->
                 self # (pcheckIndex # flag_bit # y) # ys
@@ -238,7 +241,7 @@ _pIsUnique = phoistAcyclic $ plam $ \list ->
 -- | Recursively compute the length of a list.
 pbuiltinListLength :: forall s a. (PElemConstraint PBuiltinList a) => Term s PInteger -> Term s (PBuiltinList a :--> PInteger)
 pbuiltinListLength acc =
-  (pfix #$ plam $ \self acc' l ->
+  (pfixHoisted #$ plam $ \self acc' l ->
     pelimList
       (\_ ys -> self # (acc' + 1) # ys)  -- cons case
       acc'                               -- nil case
@@ -249,10 +252,10 @@ pbuiltinListLength acc =
 -- | Check that a list contains exactly n elements.
 --  This is extremely efficient, as it counts a large number of elements in each recursive step.
 --  The script size is larger than the naive variant, but the ex-unit cost is significantly lower.
-pbuiltinListLengthFast :: forall (a :: PType) (s :: S). (PElemConstraint PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
+pbuiltinListLengthFast :: forall (a :: S -> Type) (s :: S). (PElemConstraint PBuiltinList a) => Term s (PInteger :--> PBuiltinList a :--> PInteger)
 pbuiltinListLengthFast = phoistAcyclic $ plam $ \n elems ->
   let go :: Term (s2 :: S) (PInteger :--> PInteger :--> PBuiltinList a :--> PInteger)
-      go = pfix #$ plam $ \self remainingExpected currentCount xs ->
+      go = pfixHoisted #$ plam $ \self remainingExpected currentCount xs ->
              pcond
                [ (30 #<= remainingExpected, self # (remainingExpected - 30) # (currentCount + 30) # (ptails30 # xs))
                , (20 #<= remainingExpected, self # (remainingExpected - 20) # (currentCount + 20) # (ptails20 # xs))
@@ -293,7 +296,7 @@ pmkBuiltinList = foldr go (pcon PNil)
 --
 -- Errors if no element satisfies the predicate.
 pfindWithRest ::
-  forall (list :: PType -> PType) (a :: PType).
+  forall (list :: (S -> Type) -> (S -> Type)) (a :: S -> Type).
   PListLike list =>
   PElemConstraint list a =>
   ClosedTerm
